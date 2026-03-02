@@ -1,0 +1,67 @@
+version = 1
+name = "v"
+
+# V (vlang) — snake_case functions, PascalCase types, Go-inspired but snake_case
+convention = "snake_case"
+immutable = true
+singular = true
+
+[vectors]
+join = "_"
+namespace = "__"
+
+[contexts.variable]
+convention = "snake_case"
+
+[contexts.function]
+convention = "snake_case"              # fn my_function() {}
+
+[contexts.method]
+convention = "snake_case"              # fn (s MyStruct) my_method() {}
+
+[contexts.type]
+convention = "PascalCase"              # struct MyStruct {}
+
+[contexts.struct]
+convention = "PascalCase"
+
+[contexts.interface]
+convention = "PascalCase"
+
+[contexts.enum]
+convention = "snake_case"              # enum Color { red green blue }
+
+[contexts.enum_value]
+convention = "snake_case"              # .red, .green, .blue
+
+[contexts.constant]
+convention = "snake_case"              # const my_const = 42
+
+[contexts.module]
+convention = "snake_case"              # module my_module
+
+[contexts.parameter]
+convention = "snake_case"
+
+[contexts.pub_function]
+convention = "snake_case"
+prefix = "pub "                        # pub fn my_func() (visibility keyword, not naming)
+
+[contexts.file]
+convention = "snake_case"              # my_module.v
+
+[patterns]
+factory = "new"                        # MyStruct.new() or fn new_my_struct()
+factory_alt = "new_{name}"            # fn new_reader()
+predicate = "is_{name}"
+setter = "set_{name}"
+getter = "{name}"
+type = "{Name}"
+str = "str"                            # fn (s MyStruct) str() string — stringer
+
+[externals]
+preserve_casing = true
+join_with = "_"
+
+[tags]
+open = true

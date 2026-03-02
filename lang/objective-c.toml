@@ -1,0 +1,73 @@
+version = 1
+name = "objective-c"
+
+# Objective-C — camelCase methods, PascalCase classes, 2-3 letter prefixes
+convention = "camelCase"
+immutable = true
+singular = true
+
+[vectors]
+join = "_"
+namespace = "__"
+
+[contexts.variable]
+convention = "camelCase"
+
+[contexts.instance_variable]
+convention = "camelCase"
+prefix = "_"                           # _myIvar (backing ivar)
+
+[contexts.method]
+convention = "camelCase"               # - (void)doSomethingWithValue:(id)value
+
+[contexts.class]
+convention = "PascalCase"              # NSObject, UIViewController (with prefix)
+
+[contexts.protocol]
+convention = "PascalCase"              # NSCoding, UITableViewDelegate
+
+[contexts.category]
+convention = "PascalCase"              # NSString (MyCategory)
+
+[contexts.property]
+convention = "camelCase"               # @property (nonatomic) NSString *firstName
+
+[contexts.constant]
+convention = "PascalCase"              # NSString *const kMyConstant; or extern const
+prefix = "k"                           # kCFBooleanTrue, kMyAppNotification
+
+[contexts.enum_value]
+convention = "PascalCase"              # NSTextAlignmentCenter (prefix with type name)
+
+[contexts.typedef]
+convention = "PascalCase"              # typedef NS_ENUM(NSInteger, MyEnum)
+
+[contexts.macro]
+convention = "UPPER_SNAKE_CASE"        # #define MY_MACRO
+
+[contexts.parameter]
+convention = "camelCase"
+
+[contexts.global]
+convention = "PascalCase"              # NSApp, NSNotFound
+
+[contexts.file]
+convention = "PascalCase"              # MyClass.m, MyClass.h
+
+[patterns]
+factory = "initWith{Name}"            # - (instancetype)initWithFrame:(CGRect)frame
+class_factory = "{prefix}With{Name}"  # + (instancetype)stringWithFormat:
+predicate = "is{Name}"                # isEqual, isKindOfClass
+getter = "{name}"                      # Obj-C getter is just property name
+setter = "set{Name}"                   # setFirstName:
+delegate = "{name}Delegate"            # UITableViewDelegate
+datasource = "{name}DataSource"
+type = "{Name}"
+action = "{name}Action"               # IBAction methods
+
+[externals]
+preserve_casing = true
+join_with = "_"
+
+[tags]
+open = true

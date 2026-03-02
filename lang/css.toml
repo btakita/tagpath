@@ -1,0 +1,48 @@
+version = 1
+name = "css"
+
+convention = "kebab-case"
+immutable = true
+singular = true
+
+[vectors]
+join = "-"
+namespace = "__"
+
+[contexts.class]
+convention = "kebab-case"
+
+[contexts.id]
+convention = "kebab-case"
+
+[contexts.custom_property]
+convention = "kebab-case"
+prefix = "--"
+
+[contexts.animation]
+convention = "kebab-case"
+
+[contexts.mixin]
+convention = "kebab-case"
+
+[contexts.variable]
+convention = "kebab-case"
+prefix = "--"
+
+[contexts.file]
+convention = "kebab-case"
+
+[patterns]
+block = "{block}"
+element = "{block}__{element}"
+modifier = "{block}--{modifier}"
+utility = "u-{name}"
+state = "is-{name}"
+js_hook = "js-{name}"
+
+[externals]
+preserve_casing = true
+join_with = "-"
+
+[tags]
+open = true

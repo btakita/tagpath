@@ -103,52 +103,51 @@ Data shapes are detected from the last tag:
 | `set` (when first tag is not `set`) | set |
 | `$` (trailing) | signal |
 
-## 8. Configuration (.naming.yml)
+## 8. Configuration (.naming.toml)
 
 ### 8.1 Schema
 
-```yaml
-version: 1            # Schema version (required)
-name: <string>        # Project/config name (required)
-extends: [<string>]   # Parent configs to inherit from
-convention: <string>  # Default convention
-immutable: <bool>     # Tags never mutate when composing
-singular: <bool>      # Tags are always singular form
+```toml
+version = 1              # Schema version (required)
+name = "<string>"        # Project/config name (required)
+extends = ["<string>"]   # Parent configs to inherit from
+convention = "<string>"  # Default convention
+immutable = <bool>       # Tags never mutate when composing
+singular = <bool>        # Tags are always singular form
 
-vectors:
-  join: "_"           # Tag join character
-  namespace: "__"     # Namespace separator
+[vectors]
+join = "_"               # Tag join character
+namespace = "__"         # Namespace separator
 
-patterns:
-  <role>: "<template>"  # Role-specific name templates
+[patterns]
+<role> = "<template>"    # Role-specific name templates
 
-externals:
-  preserve_casing: <bool>  # Keep external library casing
-  join_with: "<string>"    # How to join external names
+[externals]
+preserve_casing = <bool>   # Keep external library casing
+join_with = "<string>"     # How to join external names
 
-packages:
-  separator: "<string>"    # Package name separator
-  pattern: "<template>"    # Package naming template
+[packages]
+separator = "<string>"    # Package name separator
+pattern = "<template>"    # Package naming template
 
-contexts:
-  <context_name>:
-    convention: <string>   # Convention for this context
-    prefix: "<string>"     # Optional prefix
-    suffix: "<string>"     # Optional suffix
+[contexts.<context_name>]
+convention = "<string>"   # Convention for this context
+prefix = "<string>"       # Optional prefix
+suffix = "<string>"       # Optional suffix
 
-tags:
-  open: <bool>             # Allow undeclared tags
-  declared:
-    <tag_name>:
-      level: "<string>"    # abstraction level
-      domain: "<string>"   # domain classification
-      shape: "<string>"    # data shape
-      role: "<string>"     # functional role
+[tags]
+open = <bool>             # Allow undeclared tags
+
+[tags.declared.<tag_name>]
+level = "<string>"        # abstraction level
+domain = "<string>"       # domain classification
+shape = "<string>"        # data shape
+role = "<string>"         # functional role
 ```
 
 ### 8.2 Resolution
 
-When multiple `.naming.yml` files exist in a directory hierarchy, they merge bottom-up (closest to the file wins). The `extends` field pulls in named presets.
+When multiple `.naming.toml` files exist in a directory hierarchy, they merge bottom-up (closest to the file wins). The `extends` field pulls in named presets.
 
 ## 9. CLI Interface
 
@@ -164,8 +163,8 @@ Decomposes an identifier into its tag structure. Auto-detects convention unless 
 
 ### 9.2 init
 
-Generates a `.naming.yml` from a language or convention preset.
+Generates a `.naming.toml` from a language or convention preset.
 
 ### 9.3 lint (Phase 2)
 
-Validates source file identifiers against `.naming.yml` rules.
+Validates source file identifiers against `.naming.toml` rules.

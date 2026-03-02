@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;
 
-/// Top-level .naming.yml configuration
+/// Top-level .naming.toml configuration
 #[derive(Debug, Serialize, Deserialize)]
 pub struct NamingConfig {
 	pub version: u32,
@@ -93,137 +93,171 @@ pub struct TagDeclaration {
 	pub role: Option<String>,
 }
 
-/// Load a .naming.yml from a path
+/// Load a .naming.toml from a path
 pub fn load(path: &Path) -> Result<NamingConfig, String> {
 	let content = std::fs::read_to_string(path)
 		.map_err(|e| format!("failed to read {}: {e}", path.display()))?;
-	serde_yaml::from_str(&content)
+	toml::from_str(&content)
 		.map_err(|e| format!("failed to parse {}: {e}", path.display()))
 }
 
-/// Generate a .naming.yml config from a language/preset name
+/// Generate a .naming.toml config from a language/preset name
 pub fn generate_config(
 	lang: Option<&str>,
 	preset: Option<&str>,
 ) -> String {
 	match (lang, preset) {
 		(Some("typescript") | Some("ts"), _) => {
-			include_str!("../../lang/typescript.yml").to_string()
+			include_str!("../../lang/typescript.toml").to_string()
 		}
 		(Some("python") | Some("py"), _) => {
-			include_str!("../../lang/python.yml").to_string()
+			include_str!("../../lang/python.toml").to_string()
 		}
 		(Some("rust") | Some("rs"), _) => {
-			include_str!("../../lang/rust.yml").to_string()
+			include_str!("../../lang/rust.toml").to_string()
 		}
 		(Some("javascript") | Some("js"), _) => {
-			include_str!("../../lang/javascript.yml").to_string()
+			include_str!("../../lang/javascript.toml").to_string()
 		}
 		(Some("go"), _) => {
-			include_str!("../../lang/go.yml").to_string()
+			include_str!("../../lang/go.toml").to_string()
 		}
 		(Some("java"), _) => {
-			include_str!("../../lang/java.yml").to_string()
+			include_str!("../../lang/java.toml").to_string()
 		}
 		(Some("ruby") | Some("rb"), _) => {
-			include_str!("../../lang/ruby.yml").to_string()
+			include_str!("../../lang/ruby.toml").to_string()
 		}
 		(Some("swift"), _) => {
-			include_str!("../../lang/swift.yml").to_string()
+			include_str!("../../lang/swift.toml").to_string()
 		}
 		(Some("kotlin") | Some("kt"), _) => {
-			include_str!("../../lang/kotlin.yml").to_string()
+			include_str!("../../lang/kotlin.toml").to_string()
 		}
 		(Some("c"), _) => {
-			include_str!("../../lang/c.yml").to_string()
+			include_str!("../../lang/c.toml").to_string()
 		}
 		(Some("cpp") | Some("c++") | Some("cxx"), _) => {
-			include_str!("../../lang/cpp.yml").to_string()
+			include_str!("../../lang/cpp.toml").to_string()
 		}
 		(Some("csharp") | Some("cs") | Some("c#"), _) => {
-			include_str!("../../lang/csharp.yml").to_string()
+			include_str!("../../lang/csharp.toml").to_string()
 		}
 		(Some("php"), _) => {
-			include_str!("../../lang/php.yml").to_string()
+			include_str!("../../lang/php.toml").to_string()
 		}
 		(Some("elixir") | Some("ex"), _) => {
-			include_str!("../../lang/elixir.yml").to_string()
+			include_str!("../../lang/elixir.toml").to_string()
 		}
 		(Some("css"), _) => {
-			include_str!("../../lang/css.yml").to_string()
+			include_str!("../../lang/css.toml").to_string()
 		}
 		(Some("sql"), _) => {
-			include_str!("../../lang/sql.yml").to_string()
+			include_str!("../../lang/sql.toml").to_string()
 		}
 		(Some("shell") | Some("sh") | Some("bash") | Some("zsh"), _) => {
-			include_str!("../../lang/shell.yml").to_string()
+			include_str!("../../lang/shell.toml").to_string()
 		}
 		(Some("zig"), _) => {
-			include_str!("../../lang/zig.yml").to_string()
+			include_str!("../../lang/zig.toml").to_string()
 		}
 		(Some("odin"), _) => {
-			include_str!("../../lang/odin.yml").to_string()
+			include_str!("../../lang/odin.toml").to_string()
 		}
 		(Some("nim"), _) => {
-			include_str!("../../lang/nim.yml").to_string()
+			include_str!("../../lang/nim.toml").to_string()
 		}
 		(Some("haskell") | Some("hs"), _) => {
-			include_str!("../../lang/haskell.yml").to_string()
+			include_str!("../../lang/haskell.toml").to_string()
 		}
 		(Some("d") | Some("dlang"), _) => {
-			include_str!("../../lang/d.yml").to_string()
+			include_str!("../../lang/d.toml").to_string()
 		}
 		(Some("lua"), _) => {
-			include_str!("../../lang/lua.yml").to_string()
+			include_str!("../../lang/lua.toml").to_string()
 		}
 		(Some("perl") | Some("pl"), _) => {
-			include_str!("../../lang/perl.yml").to_string()
+			include_str!("../../lang/perl.toml").to_string()
 		}
 		(Some("clojure") | Some("clj"), _) => {
-			include_str!("../../lang/clojure.yml").to_string()
+			include_str!("../../lang/clojure.toml").to_string()
 		}
 		(Some("r"), _) => {
-			include_str!("../../lang/r.yml").to_string()
+			include_str!("../../lang/r.toml").to_string()
 		}
 		(Some("scala"), _) => {
-			include_str!("../../lang/scala.yml").to_string()
+			include_str!("../../lang/scala.toml").to_string()
 		}
 		(Some("dart"), _) => {
-			include_str!("../../lang/dart.yml").to_string()
+			include_str!("../../lang/dart.toml").to_string()
+		}
+		// New languages
+		(Some("common-lisp") | Some("cl") | Some("lisp"), _) => {
+			include_str!("../../lang/common-lisp.toml").to_string()
+		}
+		(Some("scheme") | Some("scm"), _) => {
+			include_str!("../../lang/scheme.toml").to_string()
+		}
+		(Some("racket") | Some("rkt"), _) => {
+			include_str!("../../lang/racket.toml").to_string()
+		}
+		(Some("erlang") | Some("erl"), _) => {
+			include_str!("../../lang/erlang.toml").to_string()
+		}
+		(Some("fsharp") | Some("fs") | Some("f#"), _) => {
+			include_str!("../../lang/fsharp.toml").to_string()
+		}
+		(Some("ocaml") | Some("ml"), _) => {
+			include_str!("../../lang/ocaml.toml").to_string()
+		}
+		(Some("julia") | Some("jl"), _) => {
+			include_str!("../../lang/julia.toml").to_string()
+		}
+		(Some("objective-c") | Some("objc"), _) => {
+			include_str!("../../lang/objective-c.toml").to_string()
+		}
+		(Some("v") | Some("vlang"), _) => {
+			include_str!("../../lang/v.toml").to_string()
+		}
+		(Some("crystal") | Some("cr"), _) => {
+			include_str!("../../lang/crystal.toml").to_string()
+		}
+		(Some("gleam"), _) => {
+			include_str!("../../lang/gleam.toml").to_string()
 		}
 		(_, Some("immutable-tag")) => {
-			include_str!("../../presets/immutable-tag.yml").to_string()
+			include_str!("../../presets/immutable-tag.toml").to_string()
 		}
 		_ => default_config(),
 	}
 }
 
 fn default_config() -> String {
-	r#"version: 1
-name: my-project
+	r#"version = 1
+name = "my-project"
 
-convention: snake_case
-immutable: true
-singular: true
+convention = "snake_case"
+immutable = true
+singular = true
 
-vectors:
-  join: "_"
-  namespace: "__"
+[vectors]
+join = "_"
+namespace = "__"
 
-patterns:
-  factory: "create_{name}"
-  hook: "use_{name}"
-  setter: "set_{name}"
-  signal: "{name}$"
-  type: "{name}_T"
-  array: "{name}_a"
+[patterns]
+factory = "create_{name}"
+hook = "use_{name}"
+setter = "set_{name}"
+signal = "{name}$"
+type = "{name}_T"
+array = "{name}_a"
 
-externals:
-  preserve_casing: true
-  join_with: "_"
+[externals]
+preserve_casing = true
+join_with = "_"
 
-tags:
-  open: true
+[tags]
+open = true
 "#
 	.to_string()
 }

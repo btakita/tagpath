@@ -1,0 +1,60 @@
+version = 1
+name = "swift"
+
+convention = "camelCase"
+immutable = true
+singular = true
+
+[vectors]
+join = "_"
+namespace = "__"
+
+[contexts.variable]
+convention = "camelCase"
+
+[contexts.function]
+convention = "camelCase"
+
+[contexts.class]
+convention = "PascalCase"
+
+[contexts.struct]
+convention = "PascalCase"
+
+[contexts.protocol]
+convention = "PascalCase"
+
+[contexts.enum]
+convention = "PascalCase"
+
+[contexts.enum_case]
+convention = "camelCase"
+
+[contexts.constant]
+convention = "camelCase"
+
+[contexts.method]
+convention = "camelCase"
+
+[contexts.parameter]
+convention = "camelCase"
+
+[contexts.typealias]
+convention = "PascalCase"
+
+[contexts.file]
+convention = "PascalCase"
+
+[patterns]
+factory = "make{Name}"
+predicate = "is{Name}"
+setter = "set{Name}"
+type = "{Name}"
+builder = "{Name}Builder"
+
+[externals]
+preserve_casing = true
+join_with = "_"
+
+[tags]
+open = true

@@ -1,0 +1,69 @@
+version = 1
+name = "csharp"
+
+convention = "PascalCase"
+immutable = true
+singular = true
+
+[vectors]
+join = "_"
+namespace = "__"
+
+[contexts.variable]
+convention = "camelCase"
+
+[contexts.method]
+convention = "PascalCase"
+
+[contexts.property]
+convention = "PascalCase"
+
+[contexts.class]
+convention = "PascalCase"
+
+[contexts.interface]
+convention = "PascalCase"
+prefix = "I"
+
+[contexts.enum]
+convention = "PascalCase"
+
+[contexts.enum_member]
+convention = "PascalCase"
+
+[contexts.constant]
+convention = "PascalCase"
+
+[contexts.parameter]
+convention = "camelCase"
+
+[contexts.field]
+convention = "camelCase"
+prefix = "_"
+
+[contexts.namespace]
+convention = "PascalCase"
+
+[contexts.event]
+convention = "PascalCase"
+
+[contexts.delegate]
+convention = "PascalCase"
+
+[contexts.file]
+convention = "PascalCase"
+
+[patterns]
+factory = "Create{Name}"
+getter = "{Name}"
+setter = "{Name}"
+predicate = "Is{Name}"
+async = "{Name}Async"
+type = "{Name}"
+
+[externals]
+preserve_casing = true
+join_with = "_"
+
+[tags]
+open = true

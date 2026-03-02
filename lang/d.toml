@@ -1,0 +1,67 @@
+version = 1
+name = "d"
+
+convention = "camelCase"
+immutable = true
+singular = true
+
+[vectors]
+join = "_"
+namespace = "__"
+
+[contexts.variable]
+convention = "camelCase"
+
+[contexts.function]
+convention = "camelCase"
+
+[contexts.type]
+convention = "PascalCase"
+
+[contexts.struct]
+convention = "PascalCase"
+
+[contexts.class]
+convention = "PascalCase"
+
+[contexts.interface]
+convention = "PascalCase"
+
+[contexts.enum]
+convention = "PascalCase"
+
+[contexts.enum_member]
+convention = "camelCase"
+
+[contexts.constant]
+convention = "camelCase"          # D style guide: camelCase for manifest constants
+
+[contexts.template]
+convention = "camelCase"
+
+[contexts.module]
+convention = "snake_case"         # std.algorithm, std.range
+
+[contexts.package]
+convention = "snake_case"
+
+[contexts.parameter]
+convention = "camelCase"
+
+[contexts.unittest]
+convention = "camelCase"
+
+[patterns]
+factory = "create{Name}"
+getter = "{name}"                 # property syntax
+setter = "{name}"                 # property syntax with assignment
+predicate = "is{Name}"
+opCall = "opCall"                 # D's constructor-like operator overload
+opAssign = "opAssign"             # assignment operator overload
+
+[externals]
+preserve_casing = true
+join_with = "_"
+
+[tags]
+open = true

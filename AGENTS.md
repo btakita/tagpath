@@ -8,16 +8,16 @@ Tag Path — parse, lint, and search tag-based identifiers across languages.
 src/
   main.rs          CLI entrypoint (clap)
   parser/mod.rs    Convention detection, tokenization, role/shape detection
-  config/mod.rs    .naming.yml schema and loading
+  config/mod.rs    .naming.toml schema and loading
   lint/mod.rs      Lint engine (Phase 2)
-lang/              Language presets (19 languages)
-presets/           Convention presets (immutable-tag.yml)
+lang/              Language presets (39 languages, TOML format)
+presets/           Convention presets (immutable-tag.toml)
 ```
 
 ## Conventions
 
 - **Rust edition 2024**
-- **Dependencies:** clap (CLI), serde + serde_yaml (config), serde_json (output)
+- **Dependencies:** clap (CLI), serde + toml (config), serde_json (output)
 - **No async** — all operations are synchronous
 - **Tabs for indentation** (match existing code)
 - Run `cargo test` before committing
@@ -26,8 +26,8 @@ presets/           Convention presets (immutable-tag.yml)
 ## Module Responsibilities
 
 - **parser** — Stateless functions. Input: string + optional convention. Output: `ParsedName` with tags, namespaces, role, shape. No I/O.
-- **config** — .naming.yml schema types and deserialization. `load()` reads from disk. `generate_config()` produces YAML from presets.
-- **lint** — (Phase 2) Validates identifiers against .naming.yml rules. Uses parser + config.
+- **config** — .naming.toml schema types and deserialization. `load()` reads from disk. `generate_config()` produces TOML from presets.
+- **lint** — (Phase 2) Validates identifiers against .naming.toml rules. Uses parser + config.
 - **main** — CLI dispatch only. No business logic.
 
 ## Key Design Decisions

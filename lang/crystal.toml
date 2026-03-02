@@ -1,0 +1,71 @@
+version = 1
+name = "crystal"
+
+# Crystal — Ruby-like syntax, snake_case, PascalCase types, compiled
+convention = "snake_case"
+immutable = true
+singular = true
+
+[vectors]
+join = "_"
+namespace = "__"
+
+[contexts.variable]
+convention = "snake_case"
+
+[contexts.method]
+convention = "snake_case"
+
+[contexts.class]
+convention = "PascalCase"              # class MyClass; end
+
+[contexts.struct]
+convention = "PascalCase"              # struct MyStruct; end
+
+[contexts.module]
+convention = "PascalCase"              # module MyModule; end
+
+[contexts.enum]
+convention = "PascalCase"              # enum Color; end
+
+[contexts.enum_member]
+convention = "PascalCase"              # Red, Green, Blue
+
+[contexts.constant]
+convention = "UPPER_SNAKE_CASE"        # MY_CONST = 42
+
+[contexts.parameter]
+convention = "snake_case"
+
+[contexts.instance_variable]
+convention = "snake_case"
+prefix = "@"                           # @my_var
+
+[contexts.class_variable]
+convention = "snake_case"
+prefix = "@@"                          # @@my_class_var
+
+[contexts.type_variable]
+convention = "PascalCase"              # class MyClass(T); end
+
+[contexts.annotation]
+convention = "PascalCase"              # @[MyAnnotation]
+
+[contexts.file]
+convention = "snake_case"              # my_class.cr
+
+[patterns]
+factory = "new"                        # MyClass.new (class method)
+predicate = "{name}?"                  # empty?, nil?, valid?
+bang = "{name}!"                       # sort!, compact!, map!
+setter = "{name}="                     # name=(value)
+getter = "{name}"
+type = "{Name}"
+converter = "to_{name}"               # to_s, to_i, to_json
+
+[externals]
+preserve_casing = true
+join_with = "_"
+
+[tags]
+open = true

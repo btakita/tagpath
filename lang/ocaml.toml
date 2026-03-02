@@ -1,0 +1,77 @@
+version = 1
+name = "ocaml"
+
+# OCaml — snake_case values/functions, PascalCase modules/constructors
+convention = "snake_case"
+immutable = true
+singular = true
+
+[vectors]
+join = "_"
+namespace = "__"
+
+[contexts.variable]
+convention = "snake_case"              # let my_value = ...
+
+[contexts.function]
+convention = "snake_case"              # let my_function x = ...
+
+[contexts.type]
+convention = "snake_case"              # type my_type = ...
+
+[contexts.module]
+convention = "PascalCase"              # module MyModule
+
+[contexts.module_type]
+convention = "UPPER_SNAKE_CASE"        # module type MY_SIG (convention, not enforced)
+
+[contexts.functor]
+convention = "PascalCase"              # module Make(M: S) = struct ... end
+
+[contexts.constructor]
+convention = "PascalCase"              # type color = Red | Green | Blue
+
+[contexts.polymorphic_variant]
+convention = "PascalCase"              # `Red, `Green (backtick prefix)
+prefix = "`"
+
+[contexts.record_field]
+convention = "snake_case"              # { first_name: string; last_name: string }
+
+[contexts.type_variable]
+convention = "snake_case"
+prefix = "'"                           # 'a, 'b, 'key
+
+[contexts.exception]
+convention = "PascalCase"              # exception Not_found (historic, but PascalCase)
+
+[contexts.parameter]
+convention = "snake_case"
+
+[contexts.label]
+convention = "snake_case"
+prefix = "~"                           # ~label:value (labeled arguments)
+
+[contexts.optional]
+convention = "snake_case"
+prefix = "?"                           # ?optional:value
+
+[contexts.file]
+convention = "snake_case"              # my_module.ml
+
+[patterns]
+factory = "create"                     # create, make
+converter = "of_{source}"             # of_list, of_string, of_int
+to = "to_{target}"                     # to_list, to_string, to_int
+predicate = "is_{name}"               # is_empty, is_none
+getter = "{name}"
+setter = "set_{name}"
+type = "{name}"
+pp = "pp_{name}"                       # pretty-print: pp_print, pp_my_type
+
+[externals]
+preserve_casing = true
+join_with = "_"
+
+[tags]
+open = true

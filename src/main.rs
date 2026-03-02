@@ -24,7 +24,7 @@ enum Commands {
 		#[arg(short, long, default_value = "text")]
 		format: String,
 	},
-	/// Initialize a .naming.yml in the current directory
+	/// Initialize a .naming.toml in the current directory
 	Init {
 		/// Language preset to use
 		#[arg(short, long)]
@@ -100,13 +100,13 @@ fn cmd_parse(name: &str, convention: Option<&str>, format: &str) {
 
 fn cmd_init(lang: Option<&str>, preset: Option<&str>) {
 	let config = config::generate_config(lang, preset);
-	let path = std::path::Path::new(".naming.yml");
+	let path = std::path::Path::new(".naming.toml");
 	if path.exists() {
-		eprintln!(".naming.yml already exists");
+		eprintln!(".naming.toml already exists");
 		std::process::exit(1);
 	}
-	std::fs::write(path, config).expect("failed to write .naming.yml");
-	println!("Created .naming.yml");
+	std::fs::write(path, config).expect("failed to write .naming.toml");
+	println!("Created .naming.toml");
 }
 
 fn cmd_lint(path: &std::path::Path) {

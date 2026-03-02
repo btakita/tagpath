@@ -1,0 +1,57 @@
+version = 1
+name = "gleam"
+
+# Gleam — snake_case functions, PascalCase types, Erlang VM, Rust-inspired syntax
+convention = "snake_case"
+immutable = true
+singular = true
+
+[vectors]
+join = "_"
+namespace = "/"                        # gleam/io, gleam/list (module paths)
+
+[contexts.variable]
+convention = "snake_case"
+
+[contexts.function]
+convention = "snake_case"              # pub fn my_function() {}
+
+[contexts.type]
+convention = "PascalCase"              # pub type MyType {}
+
+[contexts.constructor]
+convention = "PascalCase"              # type Option { Some(a) None }
+
+[contexts.module]
+convention = "snake_case"              # my_module.gleam
+
+[contexts.constant]
+convention = "snake_case"              # const my_const = 42 (no UPPER_SNAKE in Gleam)
+
+[contexts.parameter]
+convention = "snake_case"
+
+[contexts.label]
+convention = "snake_case"              # fn greet(name name: String) — labeled arguments
+
+[contexts.type_variable]
+convention = "snake_case"              # type Result(value, error) — lowercase type vars
+
+[contexts.file]
+convention = "snake_case"              # my_module.gleam
+
+[patterns]
+factory = "new"                        # pub fn new() -> MyType
+predicate = "is_{name}"               # is_empty, is_ok, is_error
+converter = "to_{target}"             # to_string, to_list
+from = "from_{source}"                # from_string, from_list
+getter = "{name}"
+type = "{Name}"
+pipe = "|>"                            # Gleam pipe operator (idiomatic)
+
+[externals]
+preserve_casing = true
+join_with = "_"
+
+[tags]
+open = true

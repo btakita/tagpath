@@ -1,0 +1,69 @@
+version = 1
+name = "common-lisp"
+
+# Common Lisp — kebab-case universally, earmuffs for specials
+convention = "kebab-case"
+immutable = true
+singular = true
+
+[vectors]
+join = "-"
+namespace = ":"                        # package:symbol or package::internal-symbol
+
+[contexts.variable]
+convention = "kebab-case"
+
+[contexts.function]
+convention = "kebab-case"
+
+[contexts.macro]
+convention = "kebab-case"
+
+[contexts.special_variable]
+convention = "kebab-case"
+prefix = "*"
+suffix = "*"                           # *standard-output*, *debug-io*
+
+[contexts.constant]
+convention = "kebab-case"
+prefix = "+"
+suffix = "+"                           # +most-positive-fixnum+ convention
+
+[contexts.class]
+convention = "kebab-case"              # defclass uses kebab-case names
+
+[contexts.struct]
+convention = "kebab-case"              # defstruct uses kebab-case names
+
+[contexts.condition]
+convention = "kebab-case"              # define-condition types
+
+[contexts.generic_function]
+convention = "kebab-case"
+
+[contexts.method]
+convention = "kebab-case"
+
+[contexts.package]
+convention = "kebab-case"              # (defpackage :my-package)
+separator = "."
+
+[contexts.keyword]
+convention = "kebab-case"
+prefix = ":"                           # :my-keyword
+
+[patterns]
+factory = "make-{name}"               # make-instance, make-array, make-hash-table
+predicate = "{name}p"                  # listp, numberp (single-word)
+predicate_hyphen = "{name}-p"          # custom-thing-p (multi-word)
+accessor = "{name}-{field}"            # defstruct auto-generates struct-name-slot-name
+converter = "{name}-to-{target}"       # or coerce
+type = "{name}"
+with = "with-{name}"                   # with-open-file, with-slots
+
+[externals]
+preserve_casing = true
+join_with = "-"
+
+[tags]
+open = true

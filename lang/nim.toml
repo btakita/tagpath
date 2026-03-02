@@ -1,0 +1,73 @@
+version = 1
+name = "nim"
+
+convention = "camelCase"
+immutable = true
+singular = true
+
+[vectors]
+join = "_"
+namespace = "__"
+
+# Nim is style-insensitive: myVar, my_var, myvar all refer to the same identifier
+# (case of first letter matters, underscores/case after that are ignored)
+# The RECOMMENDED style is camelCase for procs/vars, PascalCase for types
+style_insensitive = true
+
+[contexts.variable]
+convention = "camelCase"
+
+[contexts.proc]
+convention = "camelCase"
+
+[contexts.func]
+convention = "camelCase"          # pure functions (no side effects)
+
+[contexts.method]
+convention = "camelCase"
+
+[contexts.type]
+convention = "PascalCase"
+
+[contexts.object]
+convention = "PascalCase"
+
+[contexts.enum]
+convention = "PascalCase"
+
+[contexts.enum_value]
+convention = "camelCase"
+
+[contexts.constant]
+convention = "camelCase"          # Nim uses camelCase for const, not UPPER_SNAKE
+
+[contexts.template]
+convention = "camelCase"
+
+[contexts.macro]
+convention = "camelCase"
+
+[contexts.module]
+convention = "snake_case"         # file names are snake_case
+
+[contexts.iterator]
+convention = "camelCase"
+
+[contexts.parameter]
+convention = "camelCase"
+
+[patterns]
+factory = "new{Name}"            # newFoo() convention
+init = "init{Name}"              # initFoo() for stack-allocated
+predicate = "is{Name}"
+getter = "{name}"
+setter = "{name}="               # property setter syntax
+converter = "to{Name}"           # type conversion: toInt, toString
+iterator = "items"               # default iterator name
+
+[externals]
+preserve_casing = true
+join_with = "_"
+
+[tags]
+open = true

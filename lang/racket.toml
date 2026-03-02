@@ -1,0 +1,73 @@
+version = 1
+name = "racket"
+
+# Racket — Scheme heritage, kebab-case, % prefix for class internals
+convention = "kebab-case"
+immutable = true
+singular = true
+
+[vectors]
+join = "-"
+namespace = "/"                        # module paths
+
+[contexts.variable]
+convention = "kebab-case"
+
+[contexts.function]
+convention = "kebab-case"
+
+[contexts.macro]
+convention = "kebab-case"              # define-syntax, syntax-parse
+
+[contexts.parameter]
+convention = "kebab-case"
+
+[contexts.class]
+convention = "kebab-case"
+suffix = "%"                           # my-class% convention for class names
+
+[contexts.interface]
+convention = "kebab-case"
+suffix = "<%>"                         # my-interface<%>
+
+[contexts.mixin]
+convention = "kebab-case"
+suffix = "@"                           # my-mixin@
+
+[contexts.unit]
+convention = "kebab-case"
+suffix = "@"                           # unit signatures
+
+[contexts.field]
+convention = "kebab-case"              # class fields
+
+[contexts.struct]
+convention = "kebab-case"              # struct types
+
+[contexts.module]
+convention = "kebab-case"
+
+[contexts.contract]
+convention = "kebab-case"
+suffix = "/c"                          # string/c, integer-in/c
+
+[contexts.constant]
+convention = "kebab-case"
+
+[patterns]
+predicate = "{name}?"                  # string?, list?, empty?
+bang = "{name}!"                       # set!, vector-set!
+factory = "make-{name}"               # make-object, make-hash
+converter = "{source}->{target}"       # string->number, bytes->string
+accessor = "{name}-{field}"            # struct field accessors
+setter = "set-{name}-{field}!"         # struct field mutators
+for_each = "for/each"                  # for/* iteration forms
+with = "with-{name}"                   # with-handlers
+provide = "provide"
+
+[externals]
+preserve_casing = true
+join_with = "-"
+
+[tags]
+open = true

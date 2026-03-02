@@ -1,0 +1,75 @@
+version = 1
+name = "zig"
+
+convention = "camelCase"
+immutable = true
+singular = true
+
+[vectors]
+join = "_"
+namespace = "__"
+
+# Zig uses camelCase for functions but snake_case for variables
+[contexts.variable]
+convention = "snake_case"
+
+[contexts.function]
+convention = "camelCase"
+
+[contexts.type]
+convention = "PascalCase"
+
+[contexts.struct]
+convention = "PascalCase"
+
+[contexts.enum]
+convention = "PascalCase"
+
+[contexts.enum_field]
+convention = "snake_case"
+
+[contexts.union]
+convention = "PascalCase"
+
+[contexts.error_set]
+convention = "PascalCase"
+
+[contexts.constant]
+convention = "snake_case"         # Zig uses snake_case for const, not UPPER_SNAKE
+
+[contexts.comptime]
+convention = "snake_case"         # comptime values follow variable convention
+
+[contexts.parameter]
+convention = "snake_case"
+
+[contexts.field]
+convention = "snake_case"
+
+[contexts.namespace]
+convention = "PascalCase"         # file-as-namespace uses PascalCase (std.mem)
+
+[contexts.test]
+convention = "snake_case"         # test "descriptive name" — but identifiers are snake_case
+
+[contexts.file]
+convention = "snake_case"         # source files are snake_case.zig
+
+[contexts.package]
+convention = "snake_case"         # package names in build.zig
+
+[patterns]
+factory = "init"                  # Zig uses init() as the constructor pattern
+deinit = "deinit"                 # explicit destructor
+getter = "{name}"                 # no get_ prefix — direct field access or fn
+setter = "set{Name}"              # rare — Zig prefers returning modified copies
+predicate = "is{Name}"            # isFoo() pattern
+iterator = "next"                 # iterator protocol: next() returns ?T
+formatter = "format"              # std.fmt integration
+
+[externals]
+preserve_casing = true
+join_with = "_"
+
+[tags]
+open = true

@@ -1,0 +1,79 @@
+version = 1
+name = "fsharp"
+
+# F# — camelCase functions, PascalCase types/modules, discriminated unions
+convention = "camelCase"
+immutable = true
+singular = true
+
+[vectors]
+join = "_"
+namespace = "__"
+
+[contexts.variable]
+convention = "camelCase"               # let myValue = ...
+
+[contexts.function]
+convention = "camelCase"               # let myFunction x = ...
+
+[contexts.type]
+convention = "PascalCase"              # type MyType = ...
+
+[contexts.module]
+convention = "PascalCase"              # module MyModule
+
+[contexts.namespace]
+convention = "PascalCase"              # namespace MyApp.Core
+
+[contexts.discriminated_union]
+convention = "PascalCase"              # type Shape = Circle | Rectangle
+
+[contexts.union_case]
+convention = "PascalCase"              # Circle, Rectangle, Triangle
+
+[contexts.record]
+convention = "PascalCase"              # type Person = { Name: string }
+
+[contexts.record_field]
+convention = "PascalCase"              # { FirstName: string; LastName: string }
+
+[contexts.interface]
+convention = "PascalCase"
+prefix = "I"                           # IDisposable, IComparable
+
+[contexts.parameter]
+convention = "camelCase"
+
+[contexts.type_parameter]
+convention = "PascalCase"
+prefix = "'"                           # 'a, 'T
+
+[contexts.exception]
+convention = "PascalCase"              # exception MyError of string
+
+[contexts.active_pattern]
+convention = "PascalCase"              # (|Even|Odd|)
+
+[contexts.computation_expression]
+convention = "camelCase"               # async { ... }, task { ... }
+
+[contexts.measure]
+convention = "camelCase"               # [<Measure>] type m
+
+[patterns]
+factory = "create{Name}"              # create or make pattern
+predicate = "is{Name}"                # isEven, isEmpty
+converter = "to{Name}"                # toList, toArray, toSeq
+from = "of{Name}"                     # ofList, ofArray, ofSeq
+try_parse = "tryParse{Name}"          # tryParseInt
+getter = "{name}"
+setter = "set{Name}"
+type = "{Name}"
+pipe = "|>"                            # F# pipe operator (idiomatic)
+
+[externals]
+preserve_casing = true
+join_with = "_"
+
+[tags]
+open = true

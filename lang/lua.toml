@@ -1,0 +1,55 @@
+version = 1
+name = "lua"
+
+convention = "snake_case"
+immutable = true
+singular = true
+
+[vectors]
+join = "_"
+namespace = "__"
+
+[contexts.variable]
+convention = "snake_case"
+
+[contexts.local]
+convention = "snake_case"
+
+[contexts.function]
+convention = "snake_case"
+
+[contexts.method]
+convention = "snake_case"         # obj:method_name()
+
+[contexts.global]
+convention = "snake_case"         # avoid globals, but snake_case when used
+
+[contexts.constant]
+convention = "UPPER_SNAKE_CASE"
+
+[contexts.module]
+convention = "snake_case"         # require("my_module")
+
+[contexts.class]
+convention = "PascalCase"         # metatables used as classes: MyClass
+
+[contexts.field]
+convention = "snake_case"
+
+[contexts.metamethod]
+convention = "snake_case"
+prefix = "__"                     # __index, __newindex, __tostring, __add
+
+[patterns]
+factory = "new"                   # MyClass.new() or MyClass:new()
+predicate = "is_{name}"
+getter = "get_{name}"
+setter = "set_{name}"
+callback = "on_{name}"           # event handlers: on_click, on_load
+
+[externals]
+preserve_casing = true
+join_with = "_"
+
+[tags]
+open = true

@@ -1,0 +1,49 @@
+version = 1
+name = "scheme"
+
+# Scheme (R7RS) — kebab-case, ? predicates, ! mutation, -> conversion
+convention = "kebab-case"
+immutable = true
+singular = true
+
+[vectors]
+join = "-"
+namespace = "/"                        # library names use /
+
+[contexts.variable]
+convention = "kebab-case"
+
+[contexts.function]
+convention = "kebab-case"
+
+[contexts.macro]
+convention = "kebab-case"              # define-syntax, syntax-rules
+
+[contexts.parameter]
+convention = "kebab-case"
+
+[contexts.record]
+convention = "kebab-case"              # define-record-type
+
+[contexts.library]
+convention = "kebab-case"              # (import (scheme base))
+
+[contexts.constant]
+convention = "kebab-case"              # no UPPER_SNAKE in Scheme
+
+[patterns]
+predicate = "{name}?"                  # null?, pair?, string?, zero?
+bang = "{name}!"                       # set!, vector-set!, set-car!
+converter = "{source}->{target}"       # string->number, list->vector
+factory = "make-{name}"               # make-vector, make-string, make-parameter
+accessor = "{name}-{field}"            # record-type field accessors
+setter = "{name}-{field}-set!"         # record field setters
+with = "with-{name}"                   # with-exception-handler
+call_with = "call-with-{name}"         # call-with-current-continuation
+
+[externals]
+preserve_casing = true
+join_with = "-"
+
+[tags]
+open = true

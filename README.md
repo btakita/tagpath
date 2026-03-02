@@ -38,7 +38,7 @@ tagpath parse "auth0__user__validate"
 # JSON output
 tagpath parse createContext_auth --format json
 
-# Initialize a .naming.yml
+# Initialize a .naming.toml
 tagpath init --lang typescript
 tagpath init --preset immutable-tag
 ```
@@ -51,8 +51,8 @@ tagpath init --preset immutable-tag
 - **Shape detection** — `*_a` (array), `*_r` (record), `*_m` (map), `*$` (signal)
 - **Namespace dimensions** — `__` separates semantic dimensions
 - **Mixed convention support** — handles `createContext_auth` (camelCase + underscore extension)
-- **Language presets** — 28 languages with per-context conventions
-- **Configurable** — `.naming.yml` for project-specific conventions
+- **Language presets** — 39 languages with per-context conventions
+- **Configurable** — `.naming.toml` for project-specific conventions
 
 ## Language Presets
 
@@ -62,53 +62,64 @@ tagpath init --preset immutable-tag
 | C++ | snake_case | STL-style, PascalCase classes |
 | C# | PascalCase | `I` prefix interfaces, camelCase locals |
 | Clojure | kebab-case | `*earmuffs*`, `:keywords`, `?` predicates, `/` namespaces |
+| Common Lisp | kebab-case | `*earmuffs*`, `+constants+`, `defun`/`defvar` |
+| Crystal | snake_case | PascalCase types, `?`/`!` suffixes, Ruby-inspired |
 | CSS | kebab-case | `--` custom properties, BEM patterns |
 | D | camelCase | PascalCase types, camelCase constants, `opCall` |
 | Dart | camelCase | `_` prefix private, camelCase constants, `factory` keyword |
 | Elixir | snake_case | PascalCase modules, `?`/`!` suffixes |
+| Erlang | snake_case | PascalCase modules, atoms, `is_` guards |
+| F# | camelCase | PascalCase types/modules, `|>` pipeline |
+| Gleam | snake_case | PascalCase types/constructors, labeled arguments |
 | Go | camelCase | PascalCase exported, `New{Name}` factory |
 | Haskell | camelCase | PascalCase types/modules, `mk`/`un` prefixes |
 | Java | camelCase | PascalCase classes, `get`/`set`/`is` prefixes |
 | JavaScript | camelCase | PascalCase classes, kebab-case files |
+| Julia | snake_case | PascalCase types, `!` mutating, Unicode identifiers |
 | Kotlin | camelCase | PascalCase classes/objects |
 | Lua | snake_case | PascalCase classes, `__` metamethods |
 | Nim | camelCase | PascalCase types, style-insensitive, `new{Name}` factory |
+| Objective-C | camelCase | PascalCase classes, 2-3 letter prefixes (`NS`, `UI`) |
+| OCaml | snake_case | PascalCase modules, `'` type variables |
 | Odin | snake_case | Ada_Case types, rich allocation patterns |
 | Perl | snake_case | `$`/`@`/`%` sigils, `::` packages, PascalCase classes |
 | PHP | camelCase | `$` prefix vars, PascalCase classes |
 | Python | snake_case | PascalCase classes, `__dunder__` |
 | R | snake_case | dot.case legacy (`is.na`), `<-` replacement functions |
+| Racket | kebab-case | `define`, `?` predicates, `!` mutation |
 | Ruby | snake_case | PascalCase classes, `?`/`!`/`=` suffixes |
 | Rust | snake_case | PascalCase types/traits, `'` lifetime prefix |
 | Scala | camelCase | PascalCase constants, `apply`/`unapply` factories |
+| Scheme | kebab-case | `define`, `?` predicates, `!` mutation, `set!` |
 | Shell | snake_case | UPPER_SNAKE env vars |
 | SQL | snake_case | UPPER_SNAKE keywords |
 | Swift | camelCase | PascalCase types/protocols |
 | TypeScript | camelCase | PascalCase types/interfaces |
+| V | snake_case | PascalCase types, Go-inspired, `C.` interop prefix |
 | Zig | camelCase | camelCase functions, snake_case variables, PascalCase types |
 
 ## Configuration
 
-Create a `.naming.yml` in your project root:
+Create a `.naming.toml` in your project root:
 
-```yaml
-version: 1
-name: my-project
-convention: snake_case
-immutable: true
-singular: true
+```toml
+version = 1
+name = "my-project"
+convention = "snake_case"
+immutable = true
+singular = true
 
-vectors:
-  join: "_"
-  namespace: "__"
+[vectors]
+join = "_"
+namespace = "__"
 
-patterns:
-  factory: "create_{name}"
-  hook: "use_{name}"
-  setter: "set_{name}"
+[patterns]
+factory = "create_{name}"
+hook = "use_{name}"
+setter = "set_{name}"
 
-tags:
-  open: true
+[tags]
+open = true
 ```
 
 ## Roadmap

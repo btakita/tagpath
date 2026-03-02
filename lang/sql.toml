@@ -1,0 +1,59 @@
+version = 1
+name = "sql"
+
+convention = "snake_case"
+immutable = true
+singular = true
+
+[vectors]
+join = "_"
+namespace = "__"
+
+[contexts.keyword]
+convention = "UPPER_SNAKE_CASE"
+
+[contexts.table]
+convention = "snake_case"
+
+[contexts.column]
+convention = "snake_case"
+
+[contexts.function]
+convention = "snake_case"
+
+[contexts.procedure]
+convention = "snake_case"
+
+[contexts.view]
+convention = "snake_case"
+
+[contexts.index]
+convention = "snake_case"
+prefix = "idx_"
+
+[contexts.constraint]
+convention = "snake_case"
+
+[contexts.trigger]
+convention = "snake_case"
+prefix = "trg_"
+
+[contexts.alias]
+convention = "snake_case"
+
+[contexts.schema]
+convention = "snake_case"
+
+[patterns]
+primary_key = "{table}_pkey"
+foreign_key = "fk_{table}_{column}"
+index = "idx_{table}_{column}"
+unique = "uq_{table}_{column}"
+type = "{Name}"
+
+[externals]
+preserve_casing = true
+join_with = "_"
+
+[tags]
+open = true
