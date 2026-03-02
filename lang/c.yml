@@ -1,0 +1,50 @@
+version: 1
+name: c
+
+convention: snake_case
+immutable: true
+singular: true
+
+vectors:
+  join: "_"
+  namespace: "__"
+
+contexts:
+  variable:
+    convention: snake_case
+  function:
+    convention: snake_case
+  typedef:
+    convention: snake_case
+    suffix: "_t"
+  struct:
+    convention: snake_case
+    suffix: "_t"
+  enum:
+    convention: snake_case
+    suffix: "_t"
+  enum_member:
+    convention: UPPER_SNAKE_CASE
+  constant:
+    convention: UPPER_SNAKE_CASE
+  macro:
+    convention: UPPER_SNAKE_CASE
+  parameter:
+    convention: snake_case
+  file:
+    convention: snake_case
+
+patterns:
+  factory: "{module}_{name}_create"
+  init: "{module}_{name}_init"
+  destroy: "{module}_{name}_destroy"
+  getter: "{module}_{name}_get"
+  setter: "{module}_{name}_set"
+  type: "{name}_t"
+
+externals:
+  preserve_casing: true
+  join_with: "_"
+
+tags:
+  open: true

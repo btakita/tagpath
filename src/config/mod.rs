@@ -116,6 +116,48 @@ pub fn generate_config(
 		(Some("rust") | Some("rs"), _) => {
 			include_str!("../../lang/rust.yml").to_string()
 		}
+		(Some("javascript") | Some("js"), _) => {
+			include_str!("../../lang/javascript.yml").to_string()
+		}
+		(Some("go"), _) => {
+			include_str!("../../lang/go.yml").to_string()
+		}
+		(Some("java"), _) => {
+			include_str!("../../lang/java.yml").to_string()
+		}
+		(Some("ruby") | Some("rb"), _) => {
+			include_str!("../../lang/ruby.yml").to_string()
+		}
+		(Some("swift"), _) => {
+			include_str!("../../lang/swift.yml").to_string()
+		}
+		(Some("kotlin") | Some("kt"), _) => {
+			include_str!("../../lang/kotlin.yml").to_string()
+		}
+		(Some("c"), _) => {
+			include_str!("../../lang/c.yml").to_string()
+		}
+		(Some("cpp") | Some("c++") | Some("cxx"), _) => {
+			include_str!("../../lang/cpp.yml").to_string()
+		}
+		(Some("csharp") | Some("cs") | Some("c#"), _) => {
+			include_str!("../../lang/csharp.yml").to_string()
+		}
+		(Some("php"), _) => {
+			include_str!("../../lang/php.yml").to_string()
+		}
+		(Some("elixir") | Some("ex"), _) => {
+			include_str!("../../lang/elixir.yml").to_string()
+		}
+		(Some("css"), _) => {
+			include_str!("../../lang/css.yml").to_string()
+		}
+		(Some("sql"), _) => {
+			include_str!("../../lang/sql.yml").to_string()
+		}
+		(Some("shell") | Some("sh") | Some("bash") | Some("zsh"), _) => {
+			include_str!("../../lang/shell.yml").to_string()
+		}
 		(_, Some("immutable-tag")) => {
 			include_str!("../../presets/immutable-tag.yml").to_string()
 		}

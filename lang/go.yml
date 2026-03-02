@@ -1,0 +1,55 @@
+version: 1
+name: go
+
+convention: camelCase
+immutable: true
+singular: true
+
+vectors:
+  join: "_"
+  namespace: "__"
+
+contexts:
+  variable:
+    convention: camelCase
+  exported_variable:
+    convention: PascalCase
+  function:
+    convention: camelCase
+  exported_function:
+    convention: PascalCase
+  type:
+    convention: PascalCase
+  interface:
+    convention: PascalCase
+    suffix: "er"
+  struct:
+    convention: PascalCase
+  constant:
+    convention: PascalCase
+  exported_constant:
+    convention: PascalCase
+  method:
+    convention: camelCase
+  exported_method:
+    convention: PascalCase
+  parameter:
+    convention: camelCase
+  package:
+    convention: lowercase
+  file:
+    convention: snake_case
+
+patterns:
+  factory: "New{Name}"
+  getter: "{Name}"
+  setter: "Set{Name}"
+  predicate: "Is{Name}"
+  type: "{Name}"
+
+externals:
+  preserve_casing: true
+  join_with: "_"
+
+tags:
+  open: true

@@ -1,0 +1,43 @@
+version: 1
+name: css
+
+convention: kebab-case
+immutable: true
+singular: true
+
+vectors:
+  join: "-"
+  namespace: "__"
+
+contexts:
+  class:
+    convention: kebab-case
+  id:
+    convention: kebab-case
+  custom_property:
+    convention: kebab-case
+    prefix: "--"
+  animation:
+    convention: kebab-case
+  mixin:
+    convention: kebab-case
+  variable:
+    convention: kebab-case
+    prefix: "--"
+  file:
+    convention: kebab-case
+
+patterns:
+  block: "{block}"
+  element: "{block}__{element}"
+  modifier: "{block}--{modifier}"
+  utility: "u-{name}"
+  state: "is-{name}"
+  js_hook: "js-{name}"
+
+externals:
+  preserve_casing: true
+  join_with: "-"
+
+tags:
+  open: true
