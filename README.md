@@ -51,16 +51,32 @@ tagpath init --preset immutable-tag
 - **Shape detection** — `*_a` (array), `*_r` (record), `*_m` (map), `*$` (signal)
 - **Namespace dimensions** — `__` separates semantic dimensions
 - **Mixed convention support** — handles `createContext_auth` (camelCase + underscore extension)
-- **Language presets** — TypeScript, Python, Rust (more coming)
+- **Language presets** — 19 languages with per-context conventions
 - **Configurable** — `.naming.yml` for project-specific conventions
 
 ## Language Presets
 
-| Language | Conventions |
-|----------|------------|
-| TypeScript | camelCase (vars/functions), PascalCase (types/classes), UPPER_SNAKE_CASE (constants) |
-| Python | snake_case (vars/functions), PascalCase (classes), UPPER_SNAKE_CASE (constants) |
-| Rust | snake_case (vars/functions/modules), PascalCase (types/traits/enums), UPPER_SNAKE_CASE (constants) |
+| Language | Default Convention | Key Contexts |
+|----------|-------------------|-------------|
+| C | snake_case | `_t` suffix types, UPPER_SNAKE macros |
+| C++ | snake_case | STL-style, PascalCase classes |
+| C# | PascalCase | `I` prefix interfaces, camelCase locals |
+| CSS | kebab-case | `--` custom properties, BEM patterns |
+| Elixir | snake_case | PascalCase modules, `?`/`!` suffixes |
+| Go | camelCase | PascalCase exported, `New{Name}` factory |
+| Java | camelCase | PascalCase classes, `get`/`set`/`is` prefixes |
+| JavaScript | camelCase | PascalCase classes, kebab-case files |
+| Kotlin | camelCase | PascalCase classes/objects |
+| Odin | snake_case | Ada_Case types, rich allocation patterns |
+| PHP | camelCase | `$` prefix vars, PascalCase classes |
+| Python | snake_case | PascalCase classes, `__dunder__` |
+| Ruby | snake_case | PascalCase classes, `?`/`!`/`=` suffixes |
+| Rust | snake_case | PascalCase types/traits, `'` lifetime prefix |
+| Shell | snake_case | UPPER_SNAKE env vars |
+| SQL | snake_case | UPPER_SNAKE keywords |
+| Swift | camelCase | PascalCase types/protocols |
+| TypeScript | camelCase | PascalCase types/interfaces |
+| Zig | camelCase | camelCase functions, snake_case variables, PascalCase types |
 
 ## Configuration
 

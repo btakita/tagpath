@@ -4,10 +4,12 @@ version = "0.1.0"
 edition = "2024"
 description = "Tag Path — parse, lint, and search tag-based identifiers across languages"
 license = "MIT"
+repository = "https://github.com/btakita/tagpath"
+keywords = ["naming", "convention", "identifier", "parser", "lint"]
+categories = ["command-line-utilities", "development-tools"]
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }
 serde = { version = "1", features = ["derive"] }
 serde_yaml = "0.9"
 serde_json = "1"
-thiserror = "2"

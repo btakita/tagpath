@@ -10,15 +10,14 @@ src/
   parser/mod.rs    Convention detection, tokenization, role/shape detection
   config/mod.rs    .naming.yml schema and loading
   lint/mod.rs      Lint engine (Phase 2)
-lang/              Language presets (typescript.yml, python.yml, rust.yml)
+lang/              Language presets (19 languages)
 presets/           Convention presets (immutable-tag.yml)
-tests/fixtures/    Test fixture files
 ```
 
 ## Conventions
 
 - **Rust edition 2024**
-- **Dependencies:** clap (CLI), serde + serde_yaml (config), serde_json (output), thiserror (errors)
+- **Dependencies:** clap (CLI), serde + serde_yaml (config), serde_json (output)
 - **No async** — all operations are synchronous
 - **Tabs for indentation** (match existing code)
 - Run `cargo test` before committing
