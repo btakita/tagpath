@@ -176,6 +176,21 @@ pub fn generate_config(
 		(Some("lua"), _) => {
 			include_str!("../../lang/lua.yml").to_string()
 		}
+		(Some("perl") | Some("pl"), _) => {
+			include_str!("../../lang/perl.yml").to_string()
+		}
+		(Some("clojure") | Some("clj"), _) => {
+			include_str!("../../lang/clojure.yml").to_string()
+		}
+		(Some("r"), _) => {
+			include_str!("../../lang/r.yml").to_string()
+		}
+		(Some("scala"), _) => {
+			include_str!("../../lang/scala.yml").to_string()
+		}
+		(Some("dart"), _) => {
+			include_str!("../../lang/dart.yml").to_string()
+		}
 		(_, Some("immutable-tag")) => {
 			include_str!("../../presets/immutable-tag.yml").to_string()
 		}

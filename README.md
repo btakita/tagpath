@@ -51,7 +51,7 @@ tagpath init --preset immutable-tag
 - **Shape detection** — `*_a` (array), `*_r` (record), `*_m` (map), `*$` (signal)
 - **Namespace dimensions** — `__` separates semantic dimensions
 - **Mixed convention support** — handles `createContext_auth` (camelCase + underscore extension)
-- **Language presets** — 23 languages with per-context conventions
+- **Language presets** — 28 languages with per-context conventions
 - **Configurable** — `.naming.yml` for project-specific conventions
 
 ## Language Presets
@@ -61,8 +61,10 @@ tagpath init --preset immutable-tag
 | C | snake_case | `_t` suffix types, UPPER_SNAKE macros |
 | C++ | snake_case | STL-style, PascalCase classes |
 | C# | PascalCase | `I` prefix interfaces, camelCase locals |
+| Clojure | kebab-case | `*earmuffs*`, `:keywords`, `?` predicates, `/` namespaces |
 | CSS | kebab-case | `--` custom properties, BEM patterns |
 | D | camelCase | PascalCase types, camelCase constants, `opCall` |
+| Dart | camelCase | `_` prefix private, camelCase constants, `factory` keyword |
 | Elixir | snake_case | PascalCase modules, `?`/`!` suffixes |
 | Go | camelCase | PascalCase exported, `New{Name}` factory |
 | Haskell | camelCase | PascalCase types/modules, `mk`/`un` prefixes |
@@ -72,10 +74,13 @@ tagpath init --preset immutable-tag
 | Lua | snake_case | PascalCase classes, `__` metamethods |
 | Nim | camelCase | PascalCase types, style-insensitive, `new{Name}` factory |
 | Odin | snake_case | Ada_Case types, rich allocation patterns |
+| Perl | snake_case | `$`/`@`/`%` sigils, `::` packages, PascalCase classes |
 | PHP | camelCase | `$` prefix vars, PascalCase classes |
 | Python | snake_case | PascalCase classes, `__dunder__` |
+| R | snake_case | dot.case legacy (`is.na`), `<-` replacement functions |
 | Ruby | snake_case | PascalCase classes, `?`/`!`/`=` suffixes |
 | Rust | snake_case | PascalCase types/traits, `'` lifetime prefix |
+| Scala | camelCase | PascalCase constants, `apply`/`unapply` factories |
 | Shell | snake_case | UPPER_SNAKE env vars |
 | SQL | snake_case | UPPER_SNAKE keywords |
 | Swift | camelCase | PascalCase types/protocols |

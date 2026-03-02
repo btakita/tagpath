@@ -1,0 +1,55 @@
+version: 1
+name: scala
+
+convention: camelCase
+immutable: true
+singular: true
+
+vectors:
+  join: "_"
+  namespace: "__"
+
+contexts:
+  variable:
+    convention: camelCase
+  val:
+    convention: camelCase          # immutable binding (preferred)
+  var:
+    convention: camelCase          # mutable binding (discouraged)
+  function:
+    convention: camelCase
+  method:
+    convention: camelCase
+  type:
+    convention: PascalCase
+  class:
+    convention: PascalCase
+  trait:
+    convention: PascalCase
+  object:
+    convention: PascalCase         # companion objects
+  case_class:
+    convention: PascalCase
+  type_parameter:
+    convention: PascalCase         # single letter: A, B, F
+  constant:
+    convention: PascalCase         # Scala constants are PascalCase, not UPPER_SNAKE
+  package:
+    convention: snake_case         # com.example.my_package (or lowercase)
+  parameter:
+    convention: camelCase
+
+patterns:
+  factory: "apply"                 # companion object apply() — List(1,2,3)
+  unapply: "unapply"              # pattern matching extractor
+  predicate: "is{Name}"
+  converter: "to{Name}"           # toList, toString, toMap
+  getter: "{name}"
+  setter: "{name}_="              # assignment syntax sugar
+
+externals:
+  preserve_casing: true
+  join_with: "_"
+
+tags:
+  open: true

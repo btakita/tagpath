@@ -1,0 +1,53 @@
+version: 1
+name: clojure
+
+# Lisp family — kebab-case is the universal convention
+convention: kebab-case
+immutable: true
+singular: true
+
+vectors:
+  join: "-"
+  namespace: "/"                   # namespace/name is the Clojure convention
+
+contexts:
+  variable:
+    convention: kebab-case
+  function:
+    convention: kebab-case
+  macro:
+    convention: kebab-case
+  constant:
+    convention: kebab-case         # no UPPER_SNAKE in Lisp
+  dynamic:
+    convention: kebab-case
+    prefix: "*"
+    suffix: "*"                    # *dynamic-var* (earmuffs)
+  namespace:
+    convention: kebab-case         # my-app.core
+    separator: "."
+  protocol:
+    convention: PascalCase         # defprotocol MyProtocol
+  record:
+    convention: PascalCase         # defrecord MyRecord
+  type:
+    convention: PascalCase         # deftype MyType
+  multimethod:
+    convention: kebab-case
+  keyword:
+    convention: kebab-case
+    prefix: ":"                    # :my-keyword
+
+patterns:
+  predicate: "{name}?"             # empty?, nil?, string?
+  bang: "{name}!"                  # swap!, reset!, conj!
+  converter: "->{Name}"            # ->MyRecord (positional factory)
+  map_converter: "map->{Name}"     # map->MyRecord (map factory)
+  private: "{name}-"               # private by convention (rare)
+
+externals:
+  preserve_casing: true
+  join_with: "-"
+
+tags:
+  open: true

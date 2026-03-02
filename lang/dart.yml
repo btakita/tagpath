@@ -1,0 +1,60 @@
+version: 1
+name: dart
+
+convention: camelCase
+immutable: true
+singular: true
+
+vectors:
+  join: "_"
+  namespace: "__"
+
+contexts:
+  variable:
+    convention: camelCase
+  function:
+    convention: camelCase
+  method:
+    convention: camelCase
+  type:
+    convention: PascalCase
+  class:
+    convention: PascalCase
+  mixin:
+    convention: PascalCase
+  enum:
+    convention: PascalCase
+  enum_value:
+    convention: camelCase
+  extension:
+    convention: PascalCase
+  typedef:
+    convention: PascalCase
+  constant:
+    convention: camelCase          # Dart uses camelCase for const, not UPPER_SNAKE
+  private:
+    convention: camelCase
+    prefix: "_"                    # _privateField, _privateMethod
+  library:
+    convention: snake_case         # library my_library;
+  parameter:
+    convention: camelCase
+  named_parameter:
+    convention: camelCase          # MyWidget(isEnabled: true)
+  file:
+    convention: snake_case         # my_widget.dart
+
+patterns:
+  factory: "factory"              # factory MyClass() — keyword-based
+  predicate: "is{Name}"
+  getter: "{name}"                # dart getters are just name
+  setter: "{name}"                # dart setters: set name(value)
+  converter: "to{Name}"           # toJson, toString
+  builder: "{name}Builder"        # Flutter pattern
+
+externals:
+  preserve_casing: true
+  join_with: "_"
+
+tags:
+  open: true
