@@ -164,6 +164,18 @@ pub fn generate_config(
 		(Some("odin"), _) => {
 			include_str!("../../lang/odin.yml").to_string()
 		}
+		(Some("nim"), _) => {
+			include_str!("../../lang/nim.yml").to_string()
+		}
+		(Some("haskell") | Some("hs"), _) => {
+			include_str!("../../lang/haskell.yml").to_string()
+		}
+		(Some("d") | Some("dlang"), _) => {
+			include_str!("../../lang/d.yml").to_string()
+		}
+		(Some("lua"), _) => {
+			include_str!("../../lang/lua.yml").to_string()
+		}
 		(_, Some("immutable-tag")) => {
 			include_str!("../../presets/immutable-tag.yml").to_string()
 		}

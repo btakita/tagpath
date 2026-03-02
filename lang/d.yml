@@ -1,0 +1,55 @@
+version: 1
+name: d
+
+convention: camelCase
+immutable: true
+singular: true
+
+vectors:
+  join: "_"
+  namespace: "__"
+
+contexts:
+  variable:
+    convention: camelCase
+  function:
+    convention: camelCase
+  type:
+    convention: PascalCase
+  struct:
+    convention: PascalCase
+  class:
+    convention: PascalCase
+  interface:
+    convention: PascalCase
+  enum:
+    convention: PascalCase
+  enum_member:
+    convention: camelCase
+  constant:
+    convention: camelCase          # D style guide: camelCase for manifest constants
+  template:
+    convention: camelCase
+  module:
+    convention: snake_case         # std.algorithm, std.range
+  package:
+    convention: snake_case
+  parameter:
+    convention: camelCase
+  unittest:
+    convention: camelCase
+
+patterns:
+  factory: "create{Name}"
+  getter: "{name}"                 # property syntax
+  setter: "{name}"                 # property syntax with assignment
+  predicate: "is{Name}"
+  opCall: "opCall"                 # D's constructor-like operator overload
+  opAssign: "opAssign"             # assignment operator overload
+
+externals:
+  preserve_casing: true
+  join_with: "_"
+
+tags:
+  open: true

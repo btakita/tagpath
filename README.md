@@ -51,7 +51,7 @@ tagpath init --preset immutable-tag
 - **Shape detection** — `*_a` (array), `*_r` (record), `*_m` (map), `*$` (signal)
 - **Namespace dimensions** — `__` separates semantic dimensions
 - **Mixed convention support** — handles `createContext_auth` (camelCase + underscore extension)
-- **Language presets** — 19 languages with per-context conventions
+- **Language presets** — 23 languages with per-context conventions
 - **Configurable** — `.naming.yml` for project-specific conventions
 
 ## Language Presets
@@ -62,11 +62,15 @@ tagpath init --preset immutable-tag
 | C++ | snake_case | STL-style, PascalCase classes |
 | C# | PascalCase | `I` prefix interfaces, camelCase locals |
 | CSS | kebab-case | `--` custom properties, BEM patterns |
+| D | camelCase | PascalCase types, camelCase constants, `opCall` |
 | Elixir | snake_case | PascalCase modules, `?`/`!` suffixes |
 | Go | camelCase | PascalCase exported, `New{Name}` factory |
+| Haskell | camelCase | PascalCase types/modules, `mk`/`un` prefixes |
 | Java | camelCase | PascalCase classes, `get`/`set`/`is` prefixes |
 | JavaScript | camelCase | PascalCase classes, kebab-case files |
 | Kotlin | camelCase | PascalCase classes/objects |
+| Lua | snake_case | PascalCase classes, `__` metamethods |
+| Nim | camelCase | PascalCase types, style-insensitive, `new{Name}` factory |
 | Odin | snake_case | Ada_Case types, rich allocation patterns |
 | PHP | camelCase | `$` prefix vars, PascalCase classes |
 | Python | snake_case | PascalCase classes, `__dunder__` |
