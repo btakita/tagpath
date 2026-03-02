@@ -1,8 +1,8 @@
 [package]
-name = "nametag"
+name = "tagpath"
 version = "0.1.0"
 edition = "2024"
-description = "Immutable tag naming convention tool — parse, lint, and search identifiers across languages"
+description = "Tag Path — parse, lint, and search tag-based identifiers across languages"
 license = "MIT"
 
 [dependencies]

@@ -5,7 +5,7 @@ use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
 #[derive(Parser)]
-#[command(name = "nametag", about = "Immutable tag naming convention tool")]
+#[command(name = "tagpath", about = "Tag Path — parse, lint, and search tag-based identifiers")]
 struct Cli {
 	#[command(subcommand)]
 	command: Commands,
@@ -111,6 +111,6 @@ fn cmd_init(lang: Option<&str>, preset: Option<&str>) {
 
 fn cmd_lint(path: &std::path::Path) {
 	let _ = path;
-	eprintln!("nametag lint: not yet implemented (Phase 2)");
+	eprintln!("tagpath lint: not yet implemented (Phase 2)");
 	std::process::exit(1);
 }
