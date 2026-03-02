@@ -1,0 +1,61 @@
+version: 1
+name: odin
+
+convention: snake_case
+immutable: true
+singular: true
+
+vectors:
+  join: "_"
+  namespace: "__"
+
+contexts:
+  variable:
+    convention: snake_case
+  procedure:
+    convention: snake_case
+  type:
+    convention: Ada_Case            # PascalCase with underscores: Some_Type
+  struct:
+    convention: Ada_Case
+  union:
+    convention: Ada_Case
+  enum:
+    convention: Ada_Case
+  enum_value:
+    convention: Ada_Case
+  constant:
+    convention: UPPER_SNAKE_CASE
+  parameter:
+    convention: snake_case
+  field:
+    convention: snake_case
+  import:
+    convention: snake_case          # prefer single word
+  package:
+    convention: snake_case
+  file:
+    convention: snake_case
+
+# Odin has distinct allocation semantics
+# new: allocate memory for a type, return pointer (no construction)
+# make: allocate underlying data for built-in types (slices, dynamic arrays, maps)
+# create: allocate AND construct, return pointer to initialized value
+# init: construct a value passed by pointer (no allocation)
+patterns:
+  new: "new"                        # allocate only, returns ^T
+  make: "make"                      # allocate built-in types ([]T, map[K]V)
+  factory: "create_{name}"          # allocate + construct
+  init: "init"                      # construct in-place (by pointer)
+  deinit: "destroy"                 # deconstruct and/or deallocate
+  free: "free"                      # deallocate raw pointer (paired with new)
+  delete: "delete"                  # deallocate built-in type (paired with make)
+  getter: "{name}"                  # direct access
+  predicate: "is_{name}"
+
+externals:
+  preserve_casing: true
+  join_with: "_"
+
+tags:
+  open: true

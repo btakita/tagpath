@@ -161,6 +161,9 @@ pub fn generate_config(
 		(Some("zig"), _) => {
 			include_str!("../../lang/zig.yml").to_string()
 		}
+		(Some("odin"), _) => {
+			include_str!("../../lang/odin.yml").to_string()
+		}
 		(_, Some("immutable-tag")) => {
 			include_str!("../../presets/immutable-tag.yml").to_string()
 		}
