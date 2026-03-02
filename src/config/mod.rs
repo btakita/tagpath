@@ -158,6 +158,9 @@ pub fn generate_config(
 		(Some("shell") | Some("sh") | Some("bash") | Some("zsh"), _) => {
 			include_str!("../../lang/shell.yml").to_string()
 		}
+		(Some("zig"), _) => {
+			include_str!("../../lang/zig.yml").to_string()
+		}
 		(_, Some("immutable-tag")) => {
 			include_str!("../../presets/immutable-tag.yml").to_string()
 		}
