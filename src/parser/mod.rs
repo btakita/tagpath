@@ -1,4 +1,5 @@
 use serde::Serialize;
+use std::fmt;
 use std::str::FromStr;
 
 /// Detected or specified naming convention
@@ -11,6 +12,20 @@ pub enum Convention {
 	PascalCase,
 	KebabCase,
 	UpperSnakeCase,
+	AdaCase,
+}
+
+impl fmt::Display for Convention {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		match self {
+			Convention::SnakeCase => write!(f, "snake_case"),
+			Convention::CamelCase => write!(f, "camelCase"),
+			Convention::PascalCase => write!(f, "PascalCase"),
+			Convention::KebabCase => write!(f, "kebab-case"),
+			Convention::UpperSnakeCase => write!(f, "UPPER_SNAKE_CASE"),
+			Convention::AdaCase => write!(f, "Ada_Case"),
+		}
+	}
 }
 
 impl FromStr for Convention {
@@ -24,6 +39,7 @@ impl FromStr for Convention {
 			"UPPER_SNAKE_CASE" | "upper_snake" | "screaming" => {
 				Ok(Convention::UpperSnakeCase)
 			}
+			"Ada_Case" | "ada" => Ok(Convention::AdaCase),
 			_ => Err(format!("unknown convention: {s}")),
 		}
 	}
@@ -51,6 +67,11 @@ pub fn detect_convention(name: &str) -> Convention {
 	if name.contains("__") || name.contains('_') {
 		if name == name.to_uppercase() && name.contains('_') {
 			Convention::UpperSnakeCase
+		} else if name.split('_').all(|seg| {
+			seg.is_empty()
+				|| seg.starts_with(|c: char| c.is_uppercase())
+		}) {
+			Convention::AdaCase
 		} else {
 			Convention::SnakeCase
 		}
@@ -162,7 +183,9 @@ fn extract_namespaces(
 	convention: Convention,
 ) -> Vec<Vec<String>> {
 	match convention {
-		Convention::SnakeCase | Convention::UpperSnakeCase => {
+		Convention::SnakeCase
+		| Convention::UpperSnakeCase
+		| Convention::AdaCase => {
 			let dimensions: Vec<&str> = name.split("__").collect();
 			if dimensions.len() <= 1 {
 				return vec![];
@@ -280,6 +303,31 @@ mod tests {
 			detect_convention("auth0__user__validate"),
 			Convention::SnakeCase
 		);
+		assert_eq!(
+			detect_convention("User_Name"),
+			Convention::AdaCase
+		);
+		assert_eq!(
+			detect_convention("Get_User_Profile"),
+			Convention::AdaCase
+		);
+	}
+
+	#[test]
+	fn test_parse_ada_case() {
+		let p = parse("User_Name", Convention::AdaCase);
+		assert_eq!(p.tags, vec!["user", "name"]);
+		assert_eq!(p.convention, Convention::AdaCase);
+	}
+
+	#[test]
+	fn test_ada_case_semantic_equivalence() {
+		let ada = parse("Person_Name", Convention::AdaCase);
+		let snake = parse("person_name", Convention::SnakeCase);
+		let camel = parse("personName", Convention::CamelCase);
+		assert_eq!(ada.tags, snake.tags);
+		assert_eq!(ada.tags, camel.tags);
+		assert_eq!(ada.tags, vec!["person", "name"]);
 	}
 
 	#[test]

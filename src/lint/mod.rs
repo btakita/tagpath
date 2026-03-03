@@ -85,7 +85,7 @@ pub fn lint(
 				column: ident.column,
 				identifier: ident.identifier.clone(),
 				expected_convention: expected_convention.clone(),
-				actual_convention: format!("{:?}", actual),
+				actual_convention: format!("{}", actual),
 				suggested_fix: Some(suggested),
 			});
 		}
@@ -117,6 +117,9 @@ fn suggest_fix(tags: &[String], convention: Convention) -> String {
 				.map(|t| t.to_uppercase())
 				.collect::<Vec<_>>()
 				.join("_")
+		}
+		Convention::AdaCase => {
+			tags.iter().map(|t| capitalize(t)).collect::<Vec<_>>().join("_")
 		}
 	}
 }

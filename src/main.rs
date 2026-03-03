@@ -108,7 +108,7 @@ fn cmd_parse(name: &str, convention: Option<&str>, format: &str) {
 		}
 		_ => {
 			println!("name:       {}", parsed.original);
-			println!("convention: {:?}", parsed.convention);
+			println!("convention: {}", parsed.convention);
 			println!(
 				"tags:       [{}]",
 				parsed.tags.join(", ")

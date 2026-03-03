@@ -16,7 +16,7 @@ cargo install tagpath
 # Parse an identifier into tags
 tagpath parse person_name
 # name:       person_name
-# convention: SnakeCase
+# convention: snake_case
 # tags:       [person, name]
 # canonical:  person_name
 
@@ -56,7 +56,7 @@ tagpath init --preset immutable-tag
 
 ## Features
 
-- **Convention detection** — auto-detects snake_case, camelCase, PascalCase, kebab-case, UPPER_SNAKE_CASE
+- **Convention detection** — auto-detects snake_case, camelCase, PascalCase, kebab-case, UPPER_SNAKE_CASE, Ada_Case
 - **Semantic equivalence** — `person_name` = `personName` = `PersonName` → `[person, name]`
 - **Role detection** — `create_*` (factory), `use_*` (hook), `set_*` (setter), `is_*` (predicate), etc.
 - **Shape detection** — `*_a` (array), `*_r` (record), `*_m` (map), `*$` (signal)

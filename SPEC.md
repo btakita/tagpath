@@ -17,15 +17,18 @@ Tag Path recognizes five naming conventions:
 | PascalCase | `PersonName` | case boundary |
 | kebab-case | `person-name` | `-` |
 | UPPER_SNAKE_CASE | `PERSON_NAME` | `_` |
+| Ada_Case | `Person_Name` | `_` |
 
 ### 2.1 Convention Detection
 
 Detection is heuristic, applied in order:
 
-1. Contains `_` or `__` → snake_case (or UPPER_SNAKE_CASE if all uppercase + contains `_`)
-2. Contains `-` → kebab-case
-3. Starts with uppercase letter → PascalCase
-4. Otherwise → camelCase
+1. Contains `_` or `__` AND all uppercase → UPPER_SNAKE_CASE
+2. Contains `_` or `__` AND every segment starts with uppercase → Ada_Case
+3. Contains `_` or `__` → snake_case
+4. Contains `-` → kebab-case
+5. Starts with uppercase letter → PascalCase
+6. Otherwise → camelCase
 
 ### 2.2 Mixed Conventions
 
