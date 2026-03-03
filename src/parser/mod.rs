@@ -4,6 +4,7 @@ use std::str::FromStr;
 /// Detected or specified naming convention
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
+#[allow(clippy::enum_variant_names)]
 pub enum Convention {
 	SnakeCase,
 	CamelCase,
@@ -90,7 +91,7 @@ fn tokenize(name: &str, convention: Convention) -> Vec<String> {
 	// to each segment. This handles mixed patterns like createContext_auth.
 	let normalized = name.replace("__", "\x00");
 	let segments: Vec<&str> = normalized
-		.split(|c| c == '_' || c == '\x00')
+		.split(['_', '\x00'])
 		.filter(|s| !s.is_empty())
 		.collect();
 	match convention {
@@ -239,7 +240,7 @@ fn detect_shape(tags: &[String]) -> Option<String> {
 			// Check for $ suffix (reactive signal)
 			if tags
 				.last()
-				.map_or(false, |t| t.ends_with('$'))
+				.is_some_and(|t| t.ends_with('$'))
 			{
 				Some("signal".to_string())
 			} else {

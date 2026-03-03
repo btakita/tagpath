@@ -1,5 +1,9 @@
 mod config;
+mod extract;
+mod lint;
 mod parser;
+mod search;
+mod treesitter;
 
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
@@ -33,11 +37,35 @@ enum Commands {
 		#[arg(short, long)]
 		preset: Option<String>,
 	},
-	/// Lint identifiers against .naming.yml rules
+	/// Lint identifiers against .naming.toml rules
 	Lint {
 		/// Path to lint
 		#[arg(default_value = ".")]
 		path: PathBuf,
+		/// Output format
+		#[arg(short, long, default_value = "text")]
+		format: String,
+	},
+	/// Extract identifiers from source files and parse their tag structure
+	Extract {
+		/// Path to extract from (file or directory)
+		path: PathBuf,
+		/// Output format
+		#[arg(short, long, default_value = "text")]
+		format: String,
+		/// Use tree-sitter AST for context-aware extraction
+		#[arg(long)]
+		ast: bool,
+	},
+	/// Search for identifiers matching a tag query
+	Search {
+		/// Tag query (e.g. "user", "create_user", "createUser")
+		query: String,
+		/// Path to search in (file or directory)
+		path: PathBuf,
+		/// Output format
+		#[arg(short, long, default_value = "text")]
+		format: String,
 	},
 }
 
@@ -52,7 +80,17 @@ fn main() {
 		Commands::Init { lang, preset } => {
 			cmd_init(lang.as_deref(), preset.as_deref())
 		}
-		Commands::Lint { path } => cmd_lint(&path),
+		Commands::Lint { path, format } => {
+			cmd_lint(&path, &format)
+		}
+		Commands::Extract { path, format, ast } => {
+			cmd_extract(&path, &format, ast)
+		}
+		Commands::Search {
+			query,
+			path,
+			format,
+		} => cmd_search(&query, &path, &format),
 	}
 }
 
@@ -109,8 +147,146 @@ fn cmd_init(lang: Option<&str>, preset: Option<&str>) {
 	println!("Created .naming.toml");
 }
 
-fn cmd_lint(path: &std::path::Path) {
-	let _ = path;
-	eprintln!("tagpath lint: not yet implemented (Phase 2)");
+fn cmd_lint(path: &std::path::Path, format: &str) {
+	// Find .naming.toml by walking up from the target path
+	let config_path = match lint::find_config(path) {
+		Some(p) => p,
+		None => {
+			eprintln!(
+				"error: no .naming.toml found (searched from {} upward)",
+				path.display()
+			);
+			eprintln!(
+				"hint: run `tagpath init` to create one"
+			);
+			std::process::exit(1);
+		}
+	};
+	let naming_config = match config::load(&config_path) {
+		Ok(c) => c,
+		Err(e) => {
+			eprintln!("error: {e}");
+			std::process::exit(1);
+		}
+	};
+	let violations = lint::lint(path, &naming_config);
+	if violations.is_empty() {
+		println!("No naming convention violations found.");
+		return;
+	}
+	match format {
+		"json" => {
+			println!(
+				"{}",
+				serde_json::to_string_pretty(&violations)
+					.unwrap()
+			);
+		}
+		_ => {
+			for v in &violations {
+				println!(
+					"{}:{}:{} warning: {} `{}` should be {} → `{}`",
+					v.file.display(),
+					v.line,
+					v.column,
+					context_label(&v.identifier, &v.expected_convention),
+					v.identifier,
+					v.expected_convention,
+					v.suggested_fix.as_deref().unwrap_or("?"),
+				);
+			}
+			eprintln!(
+				"\nFound {} violation(s).",
+				violations.len()
+			);
+		}
+	}
 	std::process::exit(1);
+}
+
+/// Generate a human-readable context label from the convention context
+fn context_label(
+	_identifier: &str,
+	expected: &str,
+) -> &'static str {
+	// The convention name hints at the context
+	match expected {
+		"snake_case" => "identifier",
+		"PascalCase" => "type",
+		"camelCase" | "camel" => "identifier",
+		"UPPER_SNAKE_CASE" | "upper_snake" | "screaming" => {
+			"constant"
+		}
+		"kebab-case" | "kebab" => "identifier",
+		_ => "identifier",
+	}
+}
+
+fn cmd_extract(
+	path: &std::path::Path,
+	format: &str,
+	ast: bool,
+) {
+	let results =
+		extract::extract_from_path_with_mode(path, ast);
+	match format {
+		"json" => {
+			println!(
+				"{}",
+				serde_json::to_string_pretty(&results).unwrap()
+			);
+		}
+		_ => {
+			for r in &results {
+				let role_str = r
+					.parsed
+					.role
+					.as_deref()
+					.unwrap_or("none");
+				let shape_str = r
+					.parsed
+					.shape
+					.as_deref()
+					.unwrap_or("none");
+				let ctx_str = match &r.context {
+					Some(c) => format!("ctx:{c}"),
+					None => "ctx:none".to_string(),
+				};
+				println!(
+					"{}:{}\t{}\t[{}]\t{:?}\t{}\trole:{}\tshape:{}",
+					r.file.display(),
+					r.line,
+					r.identifier,
+					r.parsed.tags.join(", "),
+					r.parsed.convention,
+					ctx_str,
+					role_str,
+					shape_str,
+				);
+			}
+		}
+	}
+}
+
+fn cmd_search(query: &str, path: &std::path::Path, format: &str) {
+	let results = search::search(query, path);
+	match format {
+		"json" => {
+			println!(
+				"{}",
+				serde_json::to_string_pretty(&results).unwrap()
+			);
+		}
+		_ => {
+			for r in &results {
+				println!(
+					"{}:{}\t{}\t{:?}",
+					r.file.display(),
+					r.line,
+					r.identifier,
+					r.convention,
+				);
+			}
+		}
+	}
 }
