@@ -78,7 +78,7 @@ pub fn lint(
 			parser::detect_convention(&ident.identifier);
 		if actual != expected {
 			let suggested =
-				suggest_fix(&ident.parsed.tags, expected);
+				parser::join_tags(&ident.parsed.tags, expected);
 			violations.push(LintViolation {
 				file: ident.file.clone(),
 				line: ident.line,
@@ -91,48 +91,6 @@ pub fn lint(
 		}
 	}
 	violations
-}
-
-/// Generate a suggested fix by rejoining tags in the expected convention
-fn suggest_fix(tags: &[String], convention: Convention) -> String {
-	match convention {
-		Convention::SnakeCase => tags.join("_"),
-		Convention::CamelCase => {
-			let mut result = String::new();
-			for (i, tag) in tags.iter().enumerate() {
-				if i == 0 {
-					result.push_str(&tag.to_lowercase());
-				} else {
-					result.push_str(&capitalize(tag));
-				}
-			}
-			result
-		}
-		Convention::PascalCase => {
-			tags.iter().map(|t| capitalize(t)).collect()
-		}
-		Convention::KebabCase => tags.join("-"),
-		Convention::UpperSnakeCase => {
-			tags.iter()
-				.map(|t| t.to_uppercase())
-				.collect::<Vec<_>>()
-				.join("_")
-		}
-		Convention::AdaCase => {
-			tags.iter().map(|t| capitalize(t)).collect::<Vec<_>>().join("_")
-		}
-	}
-}
-
-/// Capitalize the first character of a string
-fn capitalize(s: &str) -> String {
-	let mut chars = s.chars();
-	match chars.next() {
-		None => String::new(),
-		Some(c) => {
-			c.to_uppercase().to_string() + &chars.as_str().to_lowercase()
-		}
-	}
 }
 
 #[cfg(test)]
@@ -180,7 +138,7 @@ mod tests {
 		let tags =
 			vec!["parse".to_string(), "name".to_string()];
 		assert_eq!(
-			suggest_fix(&tags, Convention::SnakeCase),
+			parser::join_tags(&tags, Convention::SnakeCase),
 			"parse_name"
 		);
 	}
@@ -190,7 +148,7 @@ mod tests {
 		let tags =
 			vec!["parse".to_string(), "name".to_string()];
 		assert_eq!(
-			suggest_fix(&tags, Convention::PascalCase),
+			parser::join_tags(&tags, Convention::PascalCase),
 			"ParseName"
 		);
 	}
@@ -200,7 +158,7 @@ mod tests {
 		let tags =
 			vec!["parse".to_string(), "name".to_string()];
 		assert_eq!(
-			suggest_fix(&tags, Convention::CamelCase),
+			parser::join_tags(&tags, Convention::CamelCase),
 			"parseName"
 		);
 	}
@@ -210,7 +168,7 @@ mod tests {
 		let tags =
 			vec!["max".to_string(), "retries".to_string()];
 		assert_eq!(
-			suggest_fix(&tags, Convention::UpperSnakeCase),
+			parser::join_tags(&tags, Convention::UpperSnakeCase),
 			"MAX_RETRIES"
 		);
 	}

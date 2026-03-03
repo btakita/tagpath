@@ -1,10 +1,3 @@
----
-session: a8c71be7-9bb3-4d71-8080-f6ebc9a68faa
-resume: null
-agent: null
-model: null
-branch: null
----
 # tagpath
 
 Parse, lint, and search tag-based identifiers across languages and naming conventions.
@@ -56,6 +49,30 @@ tagpath search "validate_user" src/  # finds across all conventions
 # Lint against .naming.toml rules
 tagpath lint src/
 
+# Generate cross-convention aliases
+tagpath alias person_name
+# snake_case:      person_name
+# camelCase:       personName
+# PascalCase:      PersonName
+# kebab-case:      person-name
+# UPPER_SNAKE_CASE: PERSON_NAME
+# Ada_Case:        Person_Name
+
+tagpath alias person_name --convention camelCase
+# camelCase:       personName
+
+# Human-readable prose descriptions
+tagpath prose create_user_profile
+# Creates a user profile
+
+tagpath prose is_valid_email
+# Checks if email is valid
+
+# Build tag co-occurrence graphs
+tagpath graph src/ --format dot       # DOT output for Graphviz
+tagpath graph src/ --format json      # JSON nodes + edges
+tagpath graph src/ --query "user"     # subgraph around "user" tag
+
 # Initialize a .naming.toml
 tagpath init --lang typescript
 tagpath init --preset immutable-tag
@@ -76,6 +93,9 @@ tagpath init --preset immutable-tag
 - **Semantic search** — find identifiers across naming conventions by canonical tag matching
 - **Lint** — validate naming conventions against `.naming.toml` rules
 - **Tree-sitter integration** — AST-aware extraction for 14 languages with context classification
+- **Alias generation** — convert any identifier to all 6 naming conventions
+- **Prose conversion** — human-readable descriptions with role/shape awareness
+- **Tag graph** — co-occurrence graph of tag relationships across a codebase (petgraph, DOT/JSON output)
 
 ## Language Presets
 
@@ -201,73 +221,8 @@ All other supported languages (25 of 39 presets) use regex-based identifier extr
 
 - **Phase 1** ✅ — Parse, detect conventions, semantic equivalence
 - **Phase 2** ✅ — tree-sitter integration, lint command, extract identifiers, semantic search, composable configs
-- **Phase 3** (next) — Graph building, alias generation, prose conversion
+- **Phase 3** ✅ — Alias generation, prose conversion, tag co-occurrence graph
 
 ## License
 
 MIT
-
-Let's start Phase 3. Build the graph. Caching. Alias generation. Prose conversion.
-
-## Assistant
-
-Phase 3 builds naturally on the existing `ParsedName` → `ExtractedIdentifier` → search pipeline. Here's the scope:
-
-### 3a. Alias Generation (simplest — start here)
-
-Given an identifier, produce all convention variants from its canonical tags:
-
-```sh
-tagpath alias person_name
-# snake_case:       person_name
-# camelCase:        personName
-# PascalCase:       PersonName
-# kebab-case:       person-name
-# UPPER_SNAKE_CASE: PERSON_NAME
-# Ada_Case:         Person_Name
-
-tagpath alias person_name --convention camelCase
-# personName
-```
-
-Purely stateless — tag decomposition already exists in `parser`, just need the inverse: tags → convention reconstruction. The lint module already has `suggest_fix()` doing this for fix suggestions, so it's mostly extracting and exposing that logic.
-
-### 3b. Prose Conversion (builds on alias + role)
-
-Convert identifiers to natural language descriptions using role detection + tag semantics:
-
-```sh
-tagpath prose create_user_profile
-# "Creates a user profile"
-
-tagpath prose is_valid_email
-# "Checks if email is valid"
-
-tagpath prose user_name_a
-# "Array of user names"
-```
-
-Rule-based using existing role/shape detection — no LLM needed. Templates map role→verb, shape→modifier, and tags→noun phrase.
-
-### 3c. Graph Building (most complex)
-
-Build a directed graph of identifier relationships within a codebase:
-
-```sh
-tagpath graph src/ --format dot
-tagpath graph src/ --format json
-tagpath graph src/ --query "user"  # subgraph around "user" tags
-```
-
-- **Nodes:** Canonical tag sequences (deduplicated across conventions)
-- **Edges:** Inferred from roles (factory→creates), co-occurrence in scopes, AST call patterns
-- **Output:** DOT (for Graphviz), JSON adjacency list
-- **Caching:** Index extracted identifiers to disk for fast re-queries
-
-**Recommended implementation order:** 3a → 3b → 3c (each builds on the last).
-
-Ready to enter plan mode and write a detailed implementation plan for Phase 3a (alias generation)?
-
-## User
-
-implement

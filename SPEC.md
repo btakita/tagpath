@@ -160,6 +160,9 @@ tagpath init [--lang <LANG>] [--preset <PRESET>]
 tagpath extract <PATH> [--format text|json] [--ast]
 tagpath search <QUERY> <PATH> [--format text|json]
 tagpath lint [<PATH>]
+tagpath alias <NAME> [--convention <CONV>] [--format text|json]
+tagpath prose <NAME> [--format text|json]
+tagpath graph [<PATH>] [--format text|dot|json] [--query <QUERY>]
 ```
 
 ### 9.1 parse
@@ -199,6 +202,40 @@ Validates source file identifiers against `.naming.toml` rules.
 - Extracts identifiers from source files (uses tree-sitter AST when available).
 - Checks each identifier's convention against the expected convention for its context.
 - Reports violations with file path, line number, identifier name, expected convention, and actual convention.
+
+### 9.6 alias
+
+Generates cross-convention aliases for an identifier.
+
+- Parses the input identifier into canonical tags using the same tokenization rules as `parse`.
+- Reconstructs the identifier in all 6 naming conventions: snake_case, camelCase, PascalCase, kebab-case, UPPER_SNAKE_CASE, Ada_Case.
+- Optional `--convention` flag to produce only a single target convention.
+- `--format text` (default) outputs one convention per line. `--format json` outputs a JSON object with `tags` and `aliases` fields.
+
+### 9.7 prose
+
+Generates a human-readable prose description of an identifier.
+
+- Parses the input identifier into canonical tags.
+- Strips role prefixes (`create`, `get`, `is`, etc.) and shape suffixes (`a`, `list`, `map`, etc.) from the core tags.
+- Builds a natural English phrase based on role and shape:
+  - Factory: "Creates a {noun}" (e.g., `create_user_profile` -> "Creates a user profile")
+  - Predicate: "Checks if {subject} {predicate} {modifiers}" (e.g., `is_valid_email` -> "Checks if email is valid")
+  - Array shape: "Array of {noun}s" (e.g., `user_name_a` -> "Array of user names")
+  - No role/shape: capitalizes the noun phrase (e.g., `PersonName` -> "Person name")
+- `--format text` (default) outputs the prose string. `--format json` outputs a JSON object with `original`, `prose`, `tags`, `role`, and `shape` fields.
+
+### 9.8 graph
+
+Builds a tag co-occurrence graph from extracted identifiers.
+
+- Extracts all identifiers from source files under `<PATH>` (defaults to `.`).
+- Nodes represent individual tags (lowercase, deduplicated).
+- Edges connect sequential tag pairs within identifiers (e.g., `create_user` produces edge `create -> user`).
+- Edge weights count how many identifiers share that tag pair.
+- Optional `--query` flag filters to a subgraph: seed nodes matching query tags plus their direct 1-hop neighbors.
+- `--format dot` (default for `text`) outputs Graphviz DOT format.
+- `--format json` outputs a JSON object with `nodes` (sorted array) and `edges` (array of `{from, to, weight}` objects).
 
 ## 10. Extends Resolution
 

@@ -1,6 +1,6 @@
 [package]
 name = "tagpath"
-version = "0.4.0"
+version = "0.5.0"
 edition = "2024"
 description = "Tag Path — parse, lint, and search tag-based identifiers across languages"
 license = "MIT"
@@ -45,4 +45,5 @@ tree-sitter-php = { version = "0.24", optional = true }
 tree-sitter-c-sharp = { version = "0.23", optional = true }
 tree-sitter-swift = { version = "0.7", optional = true }
 tree-sitter-kotlin-ng = { version = "1.1", optional = true }
+petgraph = "0.8"
 walkdir = "2"

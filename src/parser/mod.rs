@@ -273,6 +273,61 @@ fn detect_shape(tags: &[String]) -> Option<String> {
 	}
 }
 
+/// Capitalize the first character of a string, lowercase the rest
+pub fn capitalize(s: &str) -> String {
+	let mut chars = s.chars();
+	match chars.next() {
+		None => String::new(),
+		Some(c) => {
+			c.to_uppercase().to_string() + &chars.as_str().to_lowercase()
+		}
+	}
+}
+
+/// Join tags into an identifier using the given convention
+pub fn join_tags(tags: &[String], convention: Convention) -> String {
+	match convention {
+		Convention::SnakeCase => tags.join("_"),
+		Convention::CamelCase => {
+			let mut result = String::new();
+			for (i, tag) in tags.iter().enumerate() {
+				if i == 0 {
+					result.push_str(&tag.to_lowercase());
+				} else {
+					result.push_str(&capitalize(tag));
+				}
+			}
+			result
+		}
+		Convention::PascalCase => {
+			tags.iter().map(|t| capitalize(t)).collect()
+		}
+		Convention::KebabCase => tags.join("-"),
+		Convention::UpperSnakeCase => {
+			tags.iter()
+				.map(|t| t.to_uppercase())
+				.collect::<Vec<_>>()
+				.join("_")
+		}
+		Convention::AdaCase => {
+			tags.iter()
+				.map(|t| capitalize(t))
+				.collect::<Vec<_>>()
+				.join("_")
+		}
+	}
+}
+
+/// All convention variants for iteration
+pub const ALL_CONVENTIONS: [Convention; 6] = [
+	Convention::SnakeCase,
+	Convention::CamelCase,
+	Convention::PascalCase,
+	Convention::KebabCase,
+	Convention::UpperSnakeCase,
+	Convention::AdaCase,
+];
+
 #[cfg(test)]
 mod tests {
 	use super::*;
@@ -428,6 +483,53 @@ mod tests {
 		assert_eq!(
 			p.namespaces[1],
 			vec!["company", "person", "name"]
+		);
+	}
+
+	#[test]
+	fn test_join_tags_all_conventions() {
+		let tags = vec!["person".to_string(), "name".to_string()];
+		assert_eq!(join_tags(&tags, Convention::SnakeCase), "person_name");
+		assert_eq!(join_tags(&tags, Convention::CamelCase), "personName");
+		assert_eq!(join_tags(&tags, Convention::PascalCase), "PersonName");
+		assert_eq!(join_tags(&tags, Convention::KebabCase), "person-name");
+		assert_eq!(join_tags(&tags, Convention::UpperSnakeCase), "PERSON_NAME");
+		assert_eq!(join_tags(&tags, Convention::AdaCase), "Person_Name");
+	}
+
+	#[test]
+	fn test_join_tags_roundtrip() {
+		// Parse → tags → join should produce equivalent identifiers
+		let cases = [
+			("person_name", Convention::SnakeCase),
+			("personName", Convention::CamelCase),
+			("PersonName", Convention::PascalCase),
+			("person-name", Convention::KebabCase),
+			("PERSON_NAME", Convention::UpperSnakeCase),
+			("Person_Name", Convention::AdaCase),
+		];
+		for (input, conv) in &cases {
+			let parsed = parse(input, *conv);
+			let rejoined = join_tags(&parsed.tags, *conv);
+			assert_eq!(&rejoined, input, "roundtrip failed for {input}");
+		}
+	}
+
+	#[test]
+	fn test_join_tags_cross_convention() {
+		// Parse from one convention, join to another
+		let parsed = parse("create_user_profile", Convention::SnakeCase);
+		assert_eq!(
+			join_tags(&parsed.tags, Convention::CamelCase),
+			"createUserProfile"
+		);
+		assert_eq!(
+			join_tags(&parsed.tags, Convention::PascalCase),
+			"CreateUserProfile"
+		);
+		assert_eq!(
+			join_tags(&parsed.tags, Convention::KebabCase),
+			"create-user-profile"
 		);
 	}
 }

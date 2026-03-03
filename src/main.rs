@@ -1,7 +1,10 @@
+mod alias;
 mod config;
 mod extract;
+mod graph;
 mod lint;
 mod parser;
+mod prose;
 mod search;
 mod treesitter;
 
@@ -67,6 +70,37 @@ enum Commands {
 		#[arg(short, long, default_value = "text")]
 		format: String,
 	},
+	/// Generate aliases for an identifier in all naming conventions
+	Alias {
+		/// The identifier to generate aliases for
+		name: String,
+		/// Target convention (show only this convention's alias)
+		#[arg(short, long)]
+		convention: Option<String>,
+		/// Output format
+		#[arg(short, long, default_value = "text")]
+		format: String,
+	},
+	/// Generate a human-readable prose description of an identifier
+	Prose {
+		/// The identifier to describe
+		name: String,
+		/// Output format
+		#[arg(short, long, default_value = "text")]
+		format: String,
+	},
+	/// Build a tag co-occurrence graph from extracted identifiers
+	Graph {
+		/// Path to scan (file or directory)
+		#[arg(default_value = ".")]
+		path: PathBuf,
+		/// Output format (dot, json, text)
+		#[arg(short, long, default_value = "text")]
+		format: String,
+		/// Filter to subgraph around these tags
+		#[arg(short, long)]
+		query: Option<String>,
+	},
 }
 
 fn main() {
@@ -91,6 +125,19 @@ fn main() {
 			path,
 			format,
 		} => cmd_search(&query, &path, &format),
+		Commands::Alias {
+			name,
+			convention,
+			format,
+		} => cmd_alias(&name, convention.as_deref(), &format),
+		Commands::Prose { name, format } => {
+			cmd_prose(&name, &format)
+		}
+		Commands::Graph {
+			path,
+			format,
+			query,
+		} => cmd_graph(&path, &format, query.as_deref()),
 	}
 }
 
@@ -264,6 +311,68 @@ fn cmd_extract(
 					shape_str,
 				);
 			}
+		}
+	}
+}
+
+fn cmd_alias(name: &str, convention: Option<&str>, format: &str) {
+	let target = convention
+		.and_then(|c| c.parse::<parser::Convention>().ok());
+	let result = alias::generate_aliases(name, target);
+	match format {
+		"json" => {
+			println!(
+				"{}",
+				serde_json::to_string_pretty(&result).unwrap()
+			);
+		}
+		_ => {
+			for (conv_name, alias_value) in &result.aliases {
+				println!(
+					"{:<16} {}",
+					format!("{conv_name}:"),
+					alias_value
+				);
+			}
+		}
+	}
+}
+
+fn cmd_prose(name: &str, format: &str) {
+	let result = prose::to_prose(name);
+	match format {
+		"json" => {
+			println!(
+				"{}",
+				serde_json::to_string_pretty(&result).unwrap()
+			);
+		}
+		_ => {
+			println!("{}", result.prose);
+		}
+	}
+}
+
+fn cmd_graph(
+	path: &std::path::Path,
+	format: &str,
+	query: Option<&str>,
+) {
+	let tag_graph = graph::build_graph(path);
+	match format {
+		"json" => {
+			let json = graph::to_json(&tag_graph, query);
+			println!(
+				"{}",
+				serde_json::to_string_pretty(&json).unwrap()
+			);
+		}
+		"dot" => {
+			print!("{}", graph::to_dot(&tag_graph, query));
+		}
+		_ => {
+			// Default text format outputs DOT
+			print!("{}", graph::to_dot(&tag_graph, query));
 		}
 	}
 }
