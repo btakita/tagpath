@@ -162,7 +162,7 @@ fn cmd_lint(path: &std::path::Path, format: &str) {
 			std::process::exit(1);
 		}
 	};
-	let naming_config = match config::load(&config_path) {
+	let naming_config = match config::resolve(&config_path) {
 		Ok(c) => c,
 		Err(e) => {
 			eprintln!("error: {e}");
