@@ -1,6 +1,6 @@
 [package]
 name = "tagpath"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2024"
 description = "Tag Path — parse, lint, and search tag-based identifiers across languages"
 license = "MIT"
