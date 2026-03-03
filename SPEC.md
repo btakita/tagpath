@@ -154,6 +154,8 @@ When multiple `.naming.toml` files exist in a directory hierarchy, they merge bo
 ```
 tagpath parse <NAME> [--convention <CONV>] [--format text|json]
 tagpath init [--lang <LANG>] [--preset <PRESET>]
+tagpath extract <PATH> [--format text|json] [--ast]
+tagpath search <QUERY> <PATH> [--format text|json]
 tagpath lint [<PATH>]
 ```
 
@@ -165,6 +167,52 @@ Decomposes an identifier into its tag structure. Auto-detects convention unless 
 
 Generates a `.naming.toml` from a language or convention preset.
 
-### 9.3 lint (Phase 2)
+### 9.3 extract
+
+Extracts identifiers from source files under `<PATH>`.
+
+- Recursively walks directories, selecting files by known language extensions.
+- **Regex mode** (default): Uses regex patterns to extract identifiers from source text. Works for all 39 supported languages.
+- **AST mode** (`--ast`): Uses tree-sitter to parse source files into an AST and extract identifiers with context classification. Available for 8 languages (Rust, Python, JavaScript, TypeScript, TSX, Go, C, C++). Falls back to regex for unsupported languages.
+- Each extracted identifier includes: name, file path, line number, detected convention, canonical tags, and context (when using `--ast`).
+- `--format text` (default) outputs one identifier per line. `--format json` outputs a JSON array of identifier records.
+
+### 9.4 search
+
+Performs cross-convention semantic search over source files under `<PATH>`.
+
+- The `<QUERY>` is parsed into canonical tags using the same tokenization rules as `parse`.
+- All identifiers in `<PATH>` are extracted and decomposed into canonical tags.
+- An identifier matches if the query's canonical tags appear as a subsequence of the identifier's canonical tags.
+- Matches across all naming conventions: searching for `"user"` finds `user_name`, `userName`, `UserName`, `user-name`, and `USER_NAME`.
+- Searching for `"validate_user"` finds `validateUser`, `ValidateUser`, `validate_user`, etc.
+- `--format text` (default) outputs matching identifiers with file location. `--format json` outputs a JSON array.
+
+### 9.5 lint
 
 Validates source file identifiers against `.naming.toml` rules.
+
+- Loads the nearest `.naming.toml` (with `extends` resolution) for each file.
+- Extracts identifiers from source files (uses tree-sitter AST when available).
+- Checks each identifier's convention against the expected convention for its context.
+- Reports violations with file path, line number, identifier name, expected convention, and actual convention.
+
+## 10. Extends Resolution
+
+The `extends` field in `.naming.toml` enables composable configuration.
+
+### 10.1 Syntax
+
+```toml
+extends = ["rust"]          # extend a single language preset
+extends = ["rust", "custom"] # extend multiple presets (applied left to right)
+```
+
+### 10.2 Resolution Rules
+
+1. Presets are resolved by name from the `lang/` and `presets/` directories.
+2. When extending multiple presets, they are applied left to right — later presets override earlier ones.
+3. The extending config's fields override all inherited fields at the same level.
+4. Context-level merging: `[contexts.<name>]` sections merge with inherited contexts. Only the fields specified in the extending config replace the parent values; unspecified fields are retained from the parent.
+5. Top-level fields (`convention`, `immutable`, `singular`, etc.) are fully replaced if present in the extending config.
+6. `[tags.declared]` entries merge additively — the extending config can add new tag declarations without removing inherited ones.

@@ -38,6 +38,17 @@ tagpath parse "auth0__user__validate"
 # JSON output
 tagpath parse createContext_auth --format json
 
+# Extract identifiers from source files
+tagpath extract src/ --format text
+tagpath extract src/ --ast    # AST-aware (tree-sitter)
+
+# Cross-language semantic search
+tagpath search "user" src/    # finds user_name, userName, UserName, user-name
+tagpath search "validate_user" src/  # finds across all conventions
+
+# Lint against .naming.toml rules
+tagpath lint src/
+
 # Initialize a .naming.toml
 tagpath init --lang typescript
 tagpath init --preset immutable-tag
@@ -53,6 +64,11 @@ tagpath init --preset immutable-tag
 - **Mixed convention support** — handles `createContext_auth` (camelCase + underscore extension)
 - **Language presets** — 39 languages with per-context conventions
 - **Configurable** — `.naming.toml` for project-specific conventions
+- **Composable configs** — `extends` inherits from language presets with per-context overrides
+- **Identifier extraction** — extract identifiers from source files with regex or tree-sitter AST
+- **Semantic search** — find identifiers across naming conventions by canonical tag matching
+- **Lint** — validate naming conventions against `.naming.toml` rules
+- **Tree-sitter integration** — AST-aware extraction for 8 languages with context classification
 
 ## Language Presets
 
@@ -122,11 +138,48 @@ setter = "set_{name}"
 open = true
 ```
 
+### Composable Configs (`extends`)
+
+Configs can extend language presets and override specific contexts:
+
+```toml
+# Extend a language preset
+version = 1
+name = "my-project"
+extends = ["rust"]
+
+[contexts.function]
+convention = "camelCase"  # override function convention
+```
+
+The `extends` field accepts an array of preset names. Fields from the extending config override inherited values. Context-level overrides merge with the parent — only the specified fields are replaced.
+
+## Tree-sitter Integration
+
+Tagpath uses tree-sitter for AST-aware identifier extraction in 8 languages:
+
+| Language | Grammar Crate |
+|----------|--------------|
+| Rust | tree-sitter-rust |
+| Python | tree-sitter-python |
+| JavaScript | tree-sitter-javascript |
+| TypeScript | tree-sitter-typescript |
+| TSX | tree-sitter-typescript |
+| Go | tree-sitter-go |
+| C | tree-sitter-c |
+| C++ | tree-sitter-cpp |
+
+All other supported languages (31 of 39) use regex-based identifier extraction.
+
+- Use `--ast` flag with `tagpath extract` to enable tree-sitter mode
+- AST extraction classifies identifiers by context (function, type, variable, etc.)
+- Feature flags for optional grammar selection are planned for a future release
+
 ## Roadmap
 
-- **Phase 1** (current) — Parse, detect conventions, semantic equivalence
-- **Phase 2** — tree-sitter integration, lint command, extract identifiers from source
-- **Phase 3** — Graph building, search, alias generation, prose conversion
+- **Phase 1** ✅ — Parse, detect conventions, semantic equivalence
+- **Phase 2** ✅ — tree-sitter integration, lint command, extract identifiers, semantic search, composable configs
+- **Phase 3** (next) — Graph building, alias generation, prose conversion
 
 ## License
 
