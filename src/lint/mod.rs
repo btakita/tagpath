@@ -135,10 +135,13 @@ fn capitalize(s: &str) -> String {
 #[cfg(test)]
 mod tests {
 	use super::*;
+	#[cfg(feature = "lang-rust")]
 	use crate::config::ContextConfig;
+	#[cfg(feature = "lang-rust")]
 	use std::collections::HashMap;
 	use std::io::Write;
 
+	#[cfg(feature = "lang-rust")]
 	fn make_config(
 		contexts: Vec<(&str, &str)>,
 	) -> NamingConfig {
@@ -209,6 +212,7 @@ mod tests {
 		);
 	}
 
+	#[cfg(feature = "lang-rust")]
 	#[test]
 	fn test_lint_finds_violations() {
 		let dir = std::env::temp_dir().join("tagpath_test_lint");
@@ -255,6 +259,7 @@ mod tests {
 		let _ = std::fs::remove_dir_all(&dir);
 	}
 
+	#[cfg(feature = "lang-rust")]
 	#[test]
 	fn test_lint_no_violations() {
 		let dir =
@@ -305,6 +310,7 @@ mod tests {
 		let _ = std::fs::remove_dir_all(&dir);
 	}
 
+	#[cfg(feature = "lang-rust")]
 	#[test]
 	fn test_lint_type_convention() {
 		let dir = std::env::temp_dir()

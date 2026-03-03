@@ -173,7 +173,7 @@ Extracts identifiers from source files under `<PATH>`.
 
 - Recursively walks directories, selecting files by known language extensions.
 - **Regex mode** (default): Uses regex patterns to extract identifiers from source text. Works for all 39 supported languages.
-- **AST mode** (`--ast`): Uses tree-sitter to parse source files into an AST and extract identifiers with context classification. Available for 8 languages (Rust, Python, JavaScript, TypeScript, TSX, Go, C, C++). Falls back to regex for unsupported languages.
+- **AST mode** (`--ast`): Uses tree-sitter to parse source files into an AST and extract identifiers with context classification. Available for 14 languages (Rust, Python, JavaScript, TypeScript, TSX, Go, C, C++, Java, Ruby, PHP, C#, Swift, Kotlin). Falls back to regex for unsupported languages.
 - Each extracted identifier includes: name, file path, line number, detected convention, canonical tags, and context (when using `--ast`).
 - `--format text` (default) outputs one identifier per line. `--format json` outputs a JSON array of identifier records.
 

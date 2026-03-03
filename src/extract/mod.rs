@@ -268,6 +268,7 @@ mod tests {
 		let _ = std::fs::remove_dir_all(&dir);
 	}
 
+	#[cfg(feature = "lang-rust")]
 	#[test]
 	fn test_extract_ast_mode() {
 		let dir = std::env::temp_dir().join("tagpath_test_ast_mode");

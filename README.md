@@ -68,7 +68,7 @@ tagpath init --preset immutable-tag
 - **Identifier extraction** — extract identifiers from source files with regex or tree-sitter AST
 - **Semantic search** — find identifiers across naming conventions by canonical tag matching
 - **Lint** — validate naming conventions against `.naming.toml` rules
-- **Tree-sitter integration** — AST-aware extraction for 8 languages with context classification
+- **Tree-sitter integration** — AST-aware extraction for 14 languages with context classification
 
 ## Language Presets
 
@@ -156,24 +156,39 @@ The `extends` field accepts an array of preset names. Fields from the extending 
 
 ## Tree-sitter Integration
 
-Tagpath uses tree-sitter for AST-aware identifier extraction in 8 languages:
+Tagpath uses tree-sitter for AST-aware identifier extraction in 14 languages:
 
-| Language | Grammar Crate |
-|----------|--------------|
-| Rust | tree-sitter-rust |
-| Python | tree-sitter-python |
-| JavaScript | tree-sitter-javascript |
-| TypeScript | tree-sitter-typescript |
-| TSX | tree-sitter-typescript |
-| Go | tree-sitter-go |
-| C | tree-sitter-c |
-| C++ | tree-sitter-cpp |
+| Language | Grammar Crate | Feature Flag |
+|----------|--------------|-------------|
+| Rust | tree-sitter-rust | `lang-rust` |
+| Python | tree-sitter-python | `lang-python` |
+| JavaScript | tree-sitter-javascript | `lang-javascript` |
+| TypeScript | tree-sitter-typescript | `lang-typescript` |
+| TSX | tree-sitter-typescript | `lang-typescript` |
+| Go | tree-sitter-go | `lang-go` |
+| C | tree-sitter-c | `lang-c` |
+| C++ | tree-sitter-cpp | `lang-cpp` |
+| Java | tree-sitter-java | `lang-java` |
+| Ruby | tree-sitter-ruby | `lang-ruby` |
+| PHP | tree-sitter-php | `lang-php` |
+| C# | tree-sitter-c-sharp | `lang-csharp` |
+| Swift | tree-sitter-swift | `lang-swift` |
+| Kotlin | tree-sitter-kotlin-ng | `lang-kotlin` |
 
-All other supported languages (31 of 39) use regex-based identifier extraction.
+All 14 languages are enabled by default. Disable grammars you don't need to reduce binary size:
+
+```sh
+# Install with only Rust and Python grammars
+cargo install tagpath --no-default-features --features lang-rust,lang-python
+
+# Install without any tree-sitter (regex-only extraction)
+cargo install tagpath --no-default-features
+```
+
+All other supported languages (25 of 39 presets) use regex-based identifier extraction.
 
 - Use `--ast` flag with `tagpath extract` to enable tree-sitter mode
 - AST extraction classifies identifiers by context (function, type, variable, etc.)
-- Feature flags for optional grammar selection are planned for a future release
 
 ## Roadmap
 

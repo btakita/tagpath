@@ -8,18 +8,41 @@ repository = "https://github.com/btakita/tagpath"
 keywords = ["naming", "convention", "identifier", "parser", "lint"]
 categories = ["command-line-utilities", "development-tools"]
 
+[features]
+default = ["lang-rust", "lang-python", "lang-javascript", "lang-typescript", "lang-go", "lang-c", "lang-cpp", "lang-java", "lang-ruby", "lang-php", "lang-csharp", "lang-swift", "lang-kotlin"]
+treesitter = ["dep:tree-sitter"]
+lang-rust = ["treesitter", "dep:tree-sitter-rust"]
+lang-python = ["treesitter", "dep:tree-sitter-python"]
+lang-javascript = ["treesitter", "dep:tree-sitter-javascript"]
+lang-typescript = ["treesitter", "dep:tree-sitter-typescript"]
+lang-go = ["treesitter", "dep:tree-sitter-go"]
+lang-c = ["treesitter", "dep:tree-sitter-c"]
+lang-cpp = ["treesitter", "dep:tree-sitter-cpp"]
+lang-java = ["treesitter", "dep:tree-sitter-java"]
+lang-ruby = ["treesitter", "dep:tree-sitter-ruby"]
+lang-php = ["treesitter", "dep:tree-sitter-php"]
+lang-csharp = ["treesitter", "dep:tree-sitter-c-sharp"]
+lang-swift = ["treesitter", "dep:tree-sitter-swift"]
+lang-kotlin = ["treesitter", "dep:tree-sitter-kotlin-ng"]
+
 [dependencies]
 clap = { version = "4", features = ["derive"] }
 regex = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 toml = "0.8"
-tree-sitter = "0.26"
-tree-sitter-rust = "0.24"
-tree-sitter-python = "0.25"
-tree-sitter-javascript = "0.25"
-tree-sitter-typescript = "0.23"
-tree-sitter-go = "0.25"
-tree-sitter-c = "0.24"
-tree-sitter-cpp = "0.23"
+tree-sitter = { version = "0.26", optional = true }
+tree-sitter-rust = { version = "0.24", optional = true }
+tree-sitter-python = { version = "0.25", optional = true }
+tree-sitter-javascript = { version = "0.25", optional = true }
+tree-sitter-typescript = { version = "0.23", optional = true }
+tree-sitter-go = { version = "0.25", optional = true }
+tree-sitter-c = { version = "0.24", optional = true }
+tree-sitter-cpp = { version = "0.23", optional = true }
+tree-sitter-java = { version = "0.23", optional = true }
+tree-sitter-ruby = { version = "0.23", optional = true }
+tree-sitter-php = { version = "0.24", optional = true }
+tree-sitter-c-sharp = { version = "0.23", optional = true }
+tree-sitter-swift = { version = "0.7", optional = true }
+tree-sitter-kotlin-ng = { version = "1.1", optional = true }
 walkdir = "2"

@@ -31,7 +31,7 @@ presets/               Convention presets (immutable-tag.toml)
 - **parser** — Stateless functions. Input: string + optional convention. Output: `ParsedName` with tags, namespaces, role, shape. No I/O.
 - **config** — .naming.toml schema types and deserialization. `load()` reads from disk. `generate_config()` produces TOML from presets. `extends` resolution merges parent configs with overrides.
 - **lint** — Validates identifiers against .naming.toml rules. Uses parser + config. Reports violations per file with context and expected convention.
-- **extract** — Walks source files and extracts identifiers. Regex-based extraction for all languages, tree-sitter AST extraction for 8 supported languages. Outputs identifier + file location + context.
+- **extract** — Walks source files and extracts identifiers. Regex-based extraction for all languages, tree-sitter AST extraction for 14 supported languages. Outputs identifier + file location + context.
 - **search** — Semantic search across extracted identifiers. Decomposes query into canonical tags, matches against all extracted identifiers regardless of naming convention.
 - **treesitter** — Loads tree-sitter grammars, parses source into AST, walks nodes to extract identifiers with context classification (function, type, variable, etc.).
 - **main** — CLI dispatch only. No business logic.
