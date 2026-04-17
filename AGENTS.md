@@ -64,3 +64,13 @@ presets/               Convention presets (immutable-tag.toml)
 - **Phase 1** ✅: Parse, detect, semantic equivalence, CLI
 - **Phase 2** ✅: tree-sitter integration, lint command, extract identifiers, semantic search, composable configs
 - **Phase 3** ✅: Alias generation (`tagpath alias`), prose conversion (`tagpath prose`), tag co-occurrence graph (`tagpath graph`)
+
+
+## Library Context Policy
+
+This library follows the agent-loop library-context policy. Contributors
+authoring `AGENTS.md`, `SKILL.md`, or runbooks in this repo must read:
+
+[Library Context Policy](../instruction-files/LIBRARY_CONTEXT_POLICY.md)
+
+before making changes.
