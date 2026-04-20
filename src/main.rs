@@ -1,14 +1,5 @@
-mod alias;
-mod config;
-mod extract;
-mod graph;
-mod lint;
-mod parser;
-mod prose;
-mod search;
-mod treesitter;
-
 use clap::{Parser, Subcommand};
+use tagpath::{alias, config, extract, graph, lint, parser, prose, search};
 use std::path::PathBuf;
 
 #[derive(Parser)]
