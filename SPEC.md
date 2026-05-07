@@ -164,6 +164,7 @@ tagpath lint [<PATH>]
 tagpath alias <NAME> [--convention <CONV>] [--format text|json]
 tagpath family <NAME> [--format text|json]
 tagpath prose <NAME> [--format text|json]
+tagpath normalize-query <QUERY> [--format text|json]
 tagpath graph [<PATH>] [--format text|dot|json] [--query <QUERY>]
 ```
 
@@ -244,7 +245,18 @@ Generates a human-readable prose description of an identifier.
   - No role/shape: capitalizes the noun phrase (e.g., `PersonName` -> "Person name")
 - `--format text` (default) outputs the prose string. `--format json` outputs a JSON object with `original`, `prose`, `tags`, `role`, and `shape` fields.
 
-### 9.9 graph
+### 9.9 normalize-query
+
+Normalizes a free-text agent prompt or search phrase into ordered, weighted canonical tags.
+
+- Tokenizes ordinary prose and identifier-shaped fragments from the query.
+- Parses identifier-shaped tokens (`raw_symbol`, `session-review`, `validateUser`, `auth0__user__validate`) through the same convention detection and tag parsing rules as `parse`.
+- Keeps ordinary non-stopword prose terms as lowercase tags.
+- Aggregates repeated tag mentions, giving identifier-shaped source tokens higher weight than ordinary prose terms.
+- Emits tags sorted by descending weight, then first appearance. This gives callers such as `tsift` a compact semantic query signal before lexical or hybrid fallback.
+- `--format text` (default) outputs one tag per line with weight, occurrence count, and contributing source tokens. `--format json` outputs `{ original, tags }`, where each tag includes `tag`, `weight`, `occurrences`, `first_position`, and `sources`.
+
+### 9.10 graph
 
 Builds a tag co-occurrence graph from extracted identifiers.
 

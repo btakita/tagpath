@@ -1,6 +1,6 @@
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
-use tagpath::{alias, config, extract, family, graph, lint, parser, prose, search};
+use tagpath::{alias, config, extract, family, graph, lint, parser, prose, query, search};
 
 #[derive(Parser)]
 #[command(
@@ -91,6 +91,14 @@ enum Commands {
         #[arg(short, long, default_value = "text")]
         format: String,
     },
+    /// Normalize a free-text query into ordered, weighted tags
+    NormalizeQuery {
+        /// Free-text query or agent prompt to normalize
+        query: String,
+        /// Output format
+        #[arg(short, long, default_value = "text")]
+        format: String,
+    },
     /// Build a tag co-occurrence graph from extracted identifiers
     Graph {
         /// Path to scan (file or directory)
@@ -128,6 +136,7 @@ fn main() {
         } => cmd_alias(&name, convention.as_deref(), &format),
         Commands::Family { name, format } => cmd_family(&name, &format),
         Commands::Prose { name, format } => cmd_prose(&name, &format),
+        Commands::NormalizeQuery { query, format } => cmd_normalize_query(&query, &format),
         Commands::Graph {
             path,
             format,
@@ -334,6 +343,26 @@ fn cmd_prose(name: &str, format: &str) {
         }
         _ => {
             println!("{}", result.prose);
+        }
+    }
+}
+
+fn cmd_normalize_query(input: &str, format: &str) {
+    let result = query::normalize_query(input);
+    match format {
+        "json" => {
+            println!("{}", serde_json::to_string_pretty(&result).unwrap());
+        }
+        _ => {
+            for tag in &result.tags {
+                println!(
+                    "{}\tweight:{:.1}\toccurrences:{}\tsources:[{}]",
+                    tag.tag,
+                    tag.weight,
+                    tag.occurrences,
+                    tag.sources.join(", ")
+                );
+            }
         }
     }
 }

@@ -6,5 +6,6 @@ pub mod graph;
 pub mod lint;
 pub mod parser;
 pub mod prose;
+pub mod query;
 pub mod search;
 pub mod treesitter;

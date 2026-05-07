@@ -79,6 +79,13 @@ tagpath prose create_user_profile
 tagpath prose is_valid_email
 # Checks if email is valid
 
+# Normalize free-text agent prompts into weighted tags
+tagpath normalize-query "Find session-review previews for raw_symbol output"
+# session   weight:2.0 occurrences:1 sources:[session-review]
+# review    weight:2.0 occurrences:1 sources:[session-review]
+# raw       weight:2.0 occurrences:1 sources:[raw_symbol]
+# symbol    weight:2.0 occurrences:1 sources:[raw_symbol]
+
 # Build tag co-occurrence graphs
 tagpath graph src/ --format dot       # DOT output for Graphviz
 tagpath graph src/ --format json      # JSON nodes + edges
@@ -108,6 +115,7 @@ tagpath init --preset immutable-tag
 - **Tag family schema** — compact canonical handles with dimensions, role, shape, aliases, and spelling examples
 - **Compact family summaries** — group extract/search output by canonical tags with counts and representative examples
 - **Prose conversion** — human-readable descriptions with role/shape awareness
+- **Query normalization** — turn free-text agent prompts into ordered, weighted canonical tags
 - **Tag graph** — co-occurrence graph of tag relationships across a codebase (petgraph, DOT/JSON output)
 
 ## Language Presets

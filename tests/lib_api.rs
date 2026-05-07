@@ -102,6 +102,13 @@ fn prose_via_lib() {
 }
 
 #[test]
+fn normalize_query_via_lib() {
+    let result = tagpath::query::normalize_query("Find raw_symbol output with validateUser");
+    let tags: Vec<&str> = result.tags.iter().map(|tag| tag.tag.as_str()).collect();
+    assert_eq!(&tags[..4], &["raw", "symbol", "validate", "user"]);
+}
+
+#[test]
 fn config_generate_via_lib() {
     let config = tagpath::config::generate_config(Some("rust"), None);
     assert!(config.contains("rust"));
