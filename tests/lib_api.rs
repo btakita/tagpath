@@ -109,6 +109,23 @@ fn normalize_query_via_lib() {
 }
 
 #[test]
+fn ontology_via_lib() {
+    let dir = std::env::temp_dir().join("tagpath_lib_api_ontology");
+    let _ = std::fs::remove_dir_all(&dir);
+    let tags_dir = dir.join(".naming").join("tags");
+    std::fs::create_dir_all(&tags_dir).unwrap();
+    std::fs::write(
+        tags_dir.join("session.md"),
+        "+++\ntitle = \"Session\"\nsummary = \"Stable session tag.\"\n+++\n",
+    )
+    .unwrap();
+    let ontology = tagpath::ontology::load_dir(&tags_dir).unwrap();
+    let refs = ontology.references_for_tags(&["session".to_string()]);
+    assert_eq!(refs[0].summary.as_deref(), Some("Stable session tag."));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn config_generate_via_lib() {
     let config = tagpath::config::generate_config(Some("rust"), None);
     assert!(config.contains("rust"));

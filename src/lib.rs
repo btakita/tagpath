@@ -4,6 +4,7 @@ pub mod extract;
 pub mod family;
 pub mod graph;
 pub mod lint;
+pub mod ontology;
 pub mod parser;
 pub mod prose;
 pub mod query;

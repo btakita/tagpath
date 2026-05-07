@@ -1,6 +1,8 @@
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
-use tagpath::{alias, config, extract, family, graph, lint, parser, prose, query, search};
+use tagpath::{
+    alias, config, extract, family, graph, lint, ontology, parser, prose, query, search,
+};
 
 #[derive(Parser)]
 #[command(
@@ -99,6 +101,15 @@ enum Commands {
         #[arg(short, long, default_value = "text")]
         format: String,
     },
+    /// Load and validate .naming/tags ontology markdown files
+    Ontology {
+        /// Project path containing .naming.toml and .naming/tags
+        #[arg(default_value = ".")]
+        path: PathBuf,
+        /// Output format
+        #[arg(short, long, default_value = "text")]
+        format: String,
+    },
     /// Build a tag co-occurrence graph from extracted identifiers
     Graph {
         /// Path to scan (file or directory)
@@ -137,6 +148,7 @@ fn main() {
         Commands::Family { name, format } => cmd_family(&name, &format),
         Commands::Prose { name, format } => cmd_prose(&name, &format),
         Commands::NormalizeQuery { query, format } => cmd_normalize_query(&query, &format),
+        Commands::Ontology { path, format } => cmd_ontology(&path, &format),
         Commands::Graph {
             path,
             format,
@@ -364,6 +376,53 @@ fn cmd_normalize_query(input: &str, format: &str) {
                 );
             }
         }
+    }
+}
+
+fn cmd_ontology(path: &std::path::Path, format: &str) {
+    let report = match ontology::load_project(path) {
+        Ok(report) => report,
+        Err(error) => {
+            eprintln!("error: {error}");
+            std::process::exit(1);
+        }
+    };
+    match format {
+        "json" => {
+            println!("{}", serde_json::to_string_pretty(&report).unwrap());
+        }
+        _ => {
+            println!("ontology: {}", report.ontology_dir.display());
+            if let Some(config_path) = &report.config_path {
+                println!("config:   {}", config_path.display());
+            }
+            println!("valid:    {}", report.validation.valid);
+            for tag in &report.tags {
+                let title = tag.title.as_deref().unwrap_or("-");
+                let summary = tag.summary.as_deref().unwrap_or("-");
+                println!("{}\t{}\t{}", tag.tag, title, summary);
+            }
+            for error in &report.validation.errors {
+                eprintln!("error: {}", format_ontology_diagnostic(error));
+            }
+            for warning in &report.validation.warnings {
+                eprintln!("warning: {}", format_ontology_diagnostic(warning));
+            }
+        }
+    }
+    if !report.validation.valid {
+        std::process::exit(1);
+    }
+}
+
+fn format_ontology_diagnostic(diagnostic: &ontology::OntologyDiagnostic) -> String {
+    match (&diagnostic.tag, &diagnostic.path) {
+        (Some(tag), Some(path)) => {
+            format!("{tag} ({}): {}", path.display(), diagnostic.message)
+        }
+        (Some(tag), None) => format!("{tag}: {}", diagnostic.message),
+        (None, Some(path)) => format!("{}: {}", path.display(), diagnostic.message),
+        (None, None) => diagnostic.message.clone(),
     }
 }
 

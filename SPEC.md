@@ -165,6 +165,7 @@ tagpath alias <NAME> [--convention <CONV>] [--format text|json]
 tagpath family <NAME> [--format text|json]
 tagpath prose <NAME> [--format text|json]
 tagpath normalize-query <QUERY> [--format text|json]
+tagpath ontology [<PATH>] [--format text|json]
 tagpath graph [<PATH>] [--format text|dot|json] [--query <QUERY>]
 ```
 
@@ -256,7 +257,18 @@ Normalizes a free-text agent prompt or search phrase into ordered, weighted cano
 - Emits tags sorted by descending weight, then first appearance. This gives callers such as `tsift` a compact semantic query signal before lexical or hybrid fallback.
 - `--format text` (default) outputs one tag per line with weight, occurrence count, and contributing source tokens. `--format json` outputs `{ original, tags }`, where each tag includes `tag`, `weight`, `occurrences`, `first_position`, and `sources`.
 
-### 9.10 graph
+### 9.10 ontology
+
+Loads and validates project tag ontology files from `.naming/tags/*.md`.
+
+- `<PATH>` defaults to `.`. Tagpath searches upward for `.naming.toml`; when found, `.naming/tags` is resolved relative to that config.
+- Each markdown file defines one stable domain tag. The filename stem is the default tag key (`.naming/tags/session.md` -> `session`).
+- Files may start with TOML frontmatter delimited by `+++` lines. Supported fields: `tag`, `title`, `summary`, `domain`, `level`, `shape`, `role`, and `aliases`.
+- When `summary` is omitted, the first non-heading body paragraph is used as the compact definition.
+- Validation checks that ontology keys normalize to one canonical tag, warns on missing summaries, warns when `[tags.declared]` entries have no markdown file, and errors on undeclared ontology tags when `[tags].open = false`.
+- The JSON output includes stable tag records and validation diagnostics. Downstream tools such as `tsift` can use these records to reference domain vocabulary by tag and path instead of repeating long prose definitions in every summary.
+
+### 9.11 graph
 
 Builds a tag co-occurrence graph from extracted identifiers.
 

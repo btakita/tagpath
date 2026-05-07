@@ -86,6 +86,9 @@ tagpath normalize-query "Find session-review previews for raw_symbol output"
 # raw       weight:2.0 occurrences:1 sources:[raw_symbol]
 # symbol    weight:2.0 occurrences:1 sources:[raw_symbol]
 
+# Load and validate stable domain tag docs
+tagpath ontology . --format json
+
 # Build tag co-occurrence graphs
 tagpath graph src/ --format dot       # DOT output for Graphviz
 tagpath graph src/ --format json      # JSON nodes + edges
@@ -116,6 +119,7 @@ tagpath init --preset immutable-tag
 - **Compact family summaries** — group extract/search output by canonical tags with counts and representative examples
 - **Prose conversion** — human-readable descriptions with role/shape awareness
 - **Query normalization** — turn free-text agent prompts into ordered, weighted canonical tags
+- **Tag ontology** — load `.naming/tags/*.md` domain tags and validate them against `.naming.toml`
 - **Tag graph** — co-occurrence graph of tag relationships across a codebase (petgraph, DOT/JSON output)
 
 ## Language Presets
@@ -185,6 +189,30 @@ setter = "set_{name}"
 [tags]
 open = true
 ```
+
+### Tag Ontology
+
+Projects can define stable domain vocabulary in `.naming/tags/*.md`. Each markdown file represents one canonical tag; the filename stem is the default tag key.
+
+```text
+.naming/
+  tags/
+    session.md
+    review.md
+```
+
+```md
++++
+title = "Session"
+summary = "Interactive document session."
+domain = "agent-doc"
+aliases = ["conversation"]
++++
+
+# Session
+```
+
+Run `tagpath ontology .` to validate the files. If `[tags].open = false`, every ontology file must have a matching `[tags.declared.<tag>]` entry in `.naming.toml`. JSON output includes stable tag records that downstream tools can reference by tag and markdown path.
 
 ### Composable Configs (`extends`)
 
