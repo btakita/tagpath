@@ -158,8 +158,8 @@ When multiple `.naming.toml` files exist in a directory hierarchy, they merge bo
 ```
 tagpath parse <NAME> [--convention <CONV>] [--format text|json]
 tagpath init [--lang <LANG>] [--preset <PRESET>]
-tagpath extract <PATH> [--format text|json] [--ast]
-tagpath search <QUERY> <PATH> [--format text|json]
+tagpath extract <PATH> [--format text|json|family|family-json] [--ast]
+tagpath search <QUERY> <PATH> [--format text|json|family|family-json]
 tagpath lint [<PATH>]
 tagpath alias <NAME> [--convention <CONV>] [--format text|json]
 tagpath family <NAME> [--format text|json]
@@ -184,6 +184,8 @@ Extracts identifiers from source files under `<PATH>`.
 - **AST mode** (`--ast`): Uses tree-sitter to parse source files into an AST and extract identifiers with context classification. Available for 14 languages (Rust, Python, JavaScript, TypeScript, TSX, Go, C, C++, Java, Ruby, PHP, C#, Swift, Kotlin). Falls back to regex for unsupported languages.
 - Each extracted identifier includes: name, file path, line number, detected convention, canonical tags, and context (when using `--ast`).
 - `--format text` (default) outputs one identifier per line. `--format json` outputs a JSON array of identifier records.
+- `--format family` groups identifiers by canonical tag sequence and outputs one compact family per group with the occurrence count, tags, role/shape metadata, and up to three representative examples.
+- `--format family-json` outputs the same grouped family summaries as JSON. This is intended for agent-facing callers that need a compact overview instead of every spelling and source location.
 
 ### 9.4 search
 
@@ -195,6 +197,8 @@ Performs cross-convention semantic search over source files under `<PATH>`.
 - Matches across all naming conventions: searching for `"user"` finds `user_name`, `userName`, `UserName`, `user-name`, and `USER_NAME`.
 - Searching for `"validate_user"` finds `validateUser`, `ValidateUser`, `validate_user`, etc.
 - `--format text` (default) outputs matching identifiers with file location. `--format json` outputs a JSON array.
+- `--format family` groups matching identifiers by canonical tag sequence and outputs the occurrence count plus a few representative examples per family.
+- `--format family-json` outputs the same grouped search-family summaries as JSON.
 
 ### 9.5 lint
 

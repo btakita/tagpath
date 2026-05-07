@@ -1,5 +1,5 @@
-use crate::parser;
 use crate::treesitter::IdentifierContext;
+use crate::{family, parser};
 use regex::Regex;
 use serde::Serialize;
 use std::collections::HashSet;
@@ -18,6 +18,8 @@ pub struct ExtractedIdentifier {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub context: Option<IdentifierContext>,
 }
+
+const FAMILY_EXAMPLE_LIMIT: usize = 3;
 
 /// Source file extensions to scan
 const SOURCE_EXTENSIONS: &[&str] = &[
@@ -86,6 +88,34 @@ pub fn extract_from_path_with_mode(path: &Path, ast_mode: bool) -> Vec<Extracted
         }
     }
     results
+}
+
+/// Extract identifiers and collapse them into compact canonical tag families.
+pub fn extract_families_from_path(path: &Path) -> Vec<family::TagFamilySummary> {
+    extract_families_from_path_with_mode(path, false)
+}
+
+/// Extract identifiers with optional AST mode and collapse them into tag families.
+pub fn extract_families_from_path_with_mode(
+    path: &Path,
+    ast_mode: bool,
+) -> Vec<family::TagFamilySummary> {
+    family::summarize_occurrences(
+        extract_from_path_with_mode(path, ast_mode)
+            .into_iter()
+            .map(|ident| family::FamilyOccurrence {
+                identifier: ident.identifier,
+                file: ident.file,
+                line: ident.line,
+                column: ident.column,
+                convention: ident.parsed.convention.to_string(),
+                tags: ident.parsed.tags,
+                role: ident.parsed.role,
+                shape: ident.parsed.shape,
+                context: ident.context.map(|context| context.to_string()),
+            }),
+        FAMILY_EXAMPLE_LIMIT,
+    )
 }
 
 /// Extract identifiers from a single source file using regex
@@ -250,6 +280,37 @@ mod tests {
         let idents: Vec<&str> = results.iter().map(|r| r.identifier.as_str()).collect();
         assert!(idents.contains(&"main-container"));
         assert!(idents.contains(&"font-size"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_extract_families_group_cross_convention_spellings() {
+        let dir = std::env::temp_dir().join("tagpath_test_extract_families");
+        let _ = std::fs::create_dir_all(&dir);
+        let rust_file = dir.join("sample.rs");
+        let ts_file = dir.join("sample.ts");
+        {
+            let mut f = std::fs::File::create(&rust_file).unwrap();
+            writeln!(f, "fn create_user() {{}}").unwrap();
+        }
+        {
+            let mut f = std::fs::File::create(&ts_file).unwrap();
+            writeln!(f, "function createUser() {{}}").unwrap();
+        }
+        let families = extract_families_from_path(&dir);
+        let family = families
+            .iter()
+            .find(|summary| summary.canonical == "create_user")
+            .expect("expected create_user family");
+        assert_eq!(family.count, 2);
+        assert_eq!(family.roles, vec!["factory"]);
+        let examples: Vec<&str> = family
+            .examples
+            .iter()
+            .map(|example| example.identifier.as_str())
+            .collect();
+        assert!(examples.contains(&"create_user"));
+        assert!(examples.contains(&"createUser"));
         let _ = std::fs::remove_dir_all(&dir);
     }
 

@@ -41,10 +41,12 @@ tagpath parse createContext_auth --format json
 # Extract identifiers from source files
 tagpath extract src/ --format text
 tagpath extract src/ --ast    # AST-aware (tree-sitter)
+tagpath extract src/ --format family-json  # compact grouped families
 
 # Cross-language semantic search
 tagpath search "user" src/    # finds user_name, userName, UserName, user-name
 tagpath search "validate_user" src/  # finds across all conventions
+tagpath search "validate_user" src/ --format family
 
 # Lint against .naming.toml rules
 tagpath lint src/
@@ -104,6 +106,7 @@ tagpath init --preset immutable-tag
 - **Tree-sitter integration** — AST-aware extraction for 14 languages with context classification
 - **Alias generation** — convert any identifier to all 6 naming conventions
 - **Tag family schema** — compact canonical handles with dimensions, role, shape, aliases, and spelling examples
+- **Compact family summaries** — group extract/search output by canonical tags with counts and representative examples
 - **Prose conversion** — human-readable descriptions with role/shape awareness
 - **Tag graph** — co-occurrence graph of tag relationships across a codebase (petgraph, DOT/JSON output)
 

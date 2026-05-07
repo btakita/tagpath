@@ -1,5 +1,5 @@
-use crate::extract;
 use crate::parser;
+use crate::{extract, family};
 use serde::Serialize;
 use std::path::Path;
 
@@ -46,6 +46,26 @@ pub fn search(query: &str, path: &Path) -> Vec<SearchResult> {
     // Sort by file path, then line number
     results.sort_by(|a, b| a.file.cmp(&b.file).then(a.line.cmp(&b.line)));
     results
+}
+
+/// Search for matching identifiers and collapse results into canonical tag families.
+pub fn search_families(query: &str, path: &Path) -> Vec<family::TagFamilySummary> {
+    family::summarize_occurrences(
+        search(query, path)
+            .into_iter()
+            .map(|result| family::FamilyOccurrence {
+                identifier: result.identifier,
+                file: result.file,
+                line: result.line,
+                column: result.column,
+                convention: result.convention.to_string(),
+                tags: result.tags,
+                role: result.role,
+                shape: result.shape,
+                context: None,
+            }),
+        3,
+    )
 }
 
 #[cfg(test)]
@@ -225,6 +245,39 @@ mod tests {
             "should find CSS: {idents:?}"
         );
 
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_search_families_group_matching_identifiers() {
+        let dir = std::env::temp_dir().join("tagpath_test_search_families");
+        let _ = std::fs::create_dir_all(&dir);
+        {
+            let mut f = std::fs::File::create(dir.join("auth.py")).unwrap();
+            writeln!(f, "def validate_user(name):").unwrap();
+            writeln!(f, "    pass").unwrap();
+        }
+        {
+            let mut f = std::fs::File::create(dir.join("auth.ts")).unwrap();
+            writeln!(f, "function validateUser(name: string) {{}}").unwrap();
+        }
+        {
+            let mut f = std::fs::File::create(dir.join("post.ts")).unwrap();
+            writeln!(f, "function validatePost(name: string) {{}}").unwrap();
+        }
+
+        let families = search_families("validate_user", &dir);
+        assert_eq!(families.len(), 1);
+        assert_eq!(families[0].canonical, "validate_user");
+        assert_eq!(families[0].count, 2);
+        let examples: Vec<&str> = families[0]
+            .examples
+            .iter()
+            .map(|example| example.identifier.as_str())
+            .collect();
+        assert!(examples.contains(&"validate_user"));
+        assert!(examples.contains(&"validateUser"));
+        assert!(!examples.contains(&"validatePost"));
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

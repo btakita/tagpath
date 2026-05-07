@@ -47,7 +47,7 @@ enum Commands {
     Extract {
         /// Path to extract from (file or directory)
         path: PathBuf,
-        /// Output format
+        /// Output format (text, json, family, family-json)
         #[arg(short, long, default_value = "text")]
         format: String,
         /// Use tree-sitter AST for context-aware extraction
@@ -60,7 +60,7 @@ enum Commands {
         query: String,
         /// Path to search in (file or directory)
         path: PathBuf,
-        /// Output format
+        /// Output format (text, json, family, family-json)
         #[arg(short, long, default_value = "text")]
         format: String,
     },
@@ -238,12 +238,21 @@ fn context_label(_identifier: &str, expected: &str) -> &'static str {
 }
 
 fn cmd_extract(path: &std::path::Path, format: &str, ast: bool) {
-    let results = extract::extract_from_path_with_mode(path, ast);
     match format {
+        "family-json" => {
+            let families = extract::extract_families_from_path_with_mode(path, ast);
+            println!("{}", serde_json::to_string_pretty(&families).unwrap());
+        }
+        "family" => {
+            let families = extract::extract_families_from_path_with_mode(path, ast);
+            print_family_summaries(&families);
+        }
         "json" => {
+            let results = extract::extract_from_path_with_mode(path, ast);
             println!("{}", serde_json::to_string_pretty(&results).unwrap());
         }
         _ => {
+            let results = extract::extract_from_path_with_mode(path, ast);
             for r in &results {
                 let role_str = r.parsed.role.as_deref().unwrap_or("none");
                 let shape_str = r.parsed.shape.as_deref().unwrap_or("none");
@@ -347,12 +356,21 @@ fn cmd_graph(path: &std::path::Path, format: &str, query: Option<&str>) {
 }
 
 fn cmd_search(query: &str, path: &std::path::Path, format: &str) {
-    let results = search::search(query, path);
     match format {
+        "family-json" => {
+            let families = search::search_families(query, path);
+            println!("{}", serde_json::to_string_pretty(&families).unwrap());
+        }
+        "family" => {
+            let families = search::search_families(query, path);
+            print_family_summaries(&families);
+        }
         "json" => {
+            let results = search::search(query, path);
             println!("{}", serde_json::to_string_pretty(&results).unwrap());
         }
         _ => {
+            let results = search::search(query, path);
             for r in &results {
                 println!(
                     "{}:{}\t{}\t{:?}",
@@ -360,6 +378,36 @@ fn cmd_search(query: &str, path: &std::path::Path, format: &str) {
                     r.line,
                     r.identifier,
                     r.convention,
+                );
+            }
+        }
+    }
+}
+
+fn print_family_summaries(families: &[family::TagFamilySummary]) {
+    for summary in families {
+        println!(
+            "{}\tcount:{}\ttags:[{}]",
+            summary.canonical,
+            summary.count,
+            summary.tags.join(", ")
+        );
+        if !summary.roles.is_empty() {
+            println!("  roles:  [{}]", summary.roles.join(", "));
+        }
+        if !summary.shapes.is_empty() {
+            println!("  shapes: [{}]", summary.shapes.join(", "));
+        }
+        if !summary.examples.is_empty() {
+            println!("  examples:");
+            for example in &summary.examples {
+                println!(
+                    "    {}\t{}:{}:{}\t{}",
+                    example.identifier,
+                    example.file.display(),
+                    example.line,
+                    example.column,
+                    example.convention
                 );
             }
         }
