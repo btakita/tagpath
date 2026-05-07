@@ -1,6 +1,6 @@
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
-use tagpath::{alias, config, extract, graph, lint, parser, prose, search};
+use tagpath::{alias, config, extract, family, graph, lint, parser, prose, search};
 
 #[derive(Parser)]
 #[command(
@@ -75,6 +75,14 @@ enum Commands {
         #[arg(short, long, default_value = "text")]
         format: String,
     },
+    /// Generate a stable semantic tag family for an identifier
+    Family {
+        /// The identifier to summarize as a tag family
+        name: String,
+        /// Output format
+        #[arg(short, long, default_value = "text")]
+        format: String,
+    },
     /// Generate a human-readable prose description of an identifier
     Prose {
         /// The identifier to describe
@@ -118,6 +126,7 @@ fn main() {
             convention,
             format,
         } => cmd_alias(&name, convention.as_deref(), &format),
+        Commands::Family { name, format } => cmd_family(&name, &format),
         Commands::Prose { name, format } => cmd_prose(&name, &format),
         Commands::Graph {
             path,
@@ -268,6 +277,41 @@ fn cmd_alias(name: &str, convention: Option<&str>, format: &str) {
         _ => {
             for (conv_name, alias_value) in &result.aliases {
                 println!("{:<16} {}", format!("{conv_name}:"), alias_value);
+            }
+        }
+    }
+}
+
+fn cmd_family(name: &str, format: &str) {
+    let result = family::generate_family(name);
+    match format {
+        "json" => {
+            println!("{}", serde_json::to_string_pretty(&result).unwrap());
+        }
+        _ => {
+            println!("canonical: {}", result.canonical);
+            println!("tags:      [{}]", result.tags.join(", "));
+            for dimension in &result.dimensions {
+                println!(
+                    "dimension {}: [{}] ({})",
+                    dimension.index,
+                    dimension.tags.join(", "),
+                    dimension.canonical
+                );
+            }
+            if let Some(ref role) = result.role {
+                println!("role:      {}", role);
+            }
+            if let Some(ref shape) = result.shape {
+                println!("shape:     {}", shape);
+            }
+            println!("examples:");
+            for example in &result.examples {
+                println!(
+                    "  {:<16} {}",
+                    format!("{}:", example.convention),
+                    example.spelling
+                );
             }
         }
     }

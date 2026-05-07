@@ -61,6 +61,15 @@ tagpath alias person_name
 tagpath alias person_name --convention camelCase
 # camelCase:       personName
 
+# Stable semantic families for compact callers
+tagpath family "auth0__user__validate"
+# canonical: auth0_user_validate
+# tags:      [auth0, user, validate]
+# dimension 0: [auth0] (auth0)
+# dimension 1: [user] (user)
+# dimension 2: [validate] (validate)
+# role:      validator
+
 # Human-readable prose descriptions
 tagpath prose create_user_profile
 # Creates a user profile
@@ -94,6 +103,7 @@ tagpath init --preset immutable-tag
 - **Lint** — validate naming conventions against `.naming.toml` rules
 - **Tree-sitter integration** — AST-aware extraction for 14 languages with context classification
 - **Alias generation** — convert any identifier to all 6 naming conventions
+- **Tag family schema** — compact canonical handles with dimensions, role, shape, aliases, and spelling examples
 - **Prose conversion** — human-readable descriptions with role/shape awareness
 - **Tag graph** — co-occurrence graph of tag relationships across a codebase (petgraph, DOT/JSON output)
 

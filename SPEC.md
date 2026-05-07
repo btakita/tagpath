@@ -8,7 +8,7 @@ Every identifier is a **path** — an ordered sequence of **tags** separated by 
 
 ## 2. Conventions
 
-Tag Path recognizes five naming conventions:
+Tag Path recognizes six naming conventions:
 
 | Convention | Example | Delimiter |
 |-----------|---------|-----------|
@@ -64,9 +64,10 @@ personName   → [person, name]
 PersonName   → [person, name]
 person-name  → [person, name]
 PERSON_NAME  → [person, name]
+Person_Name  → [person, name]
 ```
 
-All five are equivalent.
+All six are equivalent.
 
 ## 5. Namespace Dimensions
 
@@ -161,6 +162,7 @@ tagpath extract <PATH> [--format text|json] [--ast]
 tagpath search <QUERY> <PATH> [--format text|json]
 tagpath lint [<PATH>]
 tagpath alias <NAME> [--convention <CONV>] [--format text|json]
+tagpath family <NAME> [--format text|json]
 tagpath prose <NAME> [--format text|json]
 tagpath graph [<PATH>] [--format text|dot|json] [--query <QUERY>]
 ```
@@ -212,7 +214,20 @@ Generates cross-convention aliases for an identifier.
 - Optional `--convention` flag to produce only a single target convention.
 - `--format text` (default) outputs one convention per line. `--format json` outputs a JSON object with `tags` and `aliases` fields.
 
-### 9.7 prose
+### 9.7 family
+
+Generates a stable semantic tag family for an identifier.
+
+- Parses the input identifier into canonical tags using the same tokenization rules as `parse`.
+- Emits one stable canonical handle for the whole tag sequence, using lowercase tags joined by `_`.
+- Preserves namespace dimensions from `__` as ordered dimension records with per-dimension canonical handles.
+- Includes detected role and shape metadata when present.
+- Generates surface spelling examples in all 6 naming conventions: snake_case, camelCase, PascalCase, kebab-case, UPPER_SNAKE_CASE, Ada_Case.
+- `--format text` (default) outputs the canonical handle, tags, dimensions, role/shape metadata, and examples. `--format json` outputs a JSON object with `original`, `canonical`, `tags`, `dimensions`, `role`, `shape`, `aliases`, and `examples` fields.
+
+This schema is intended for callers such as `tsift` that need to collapse repeated identifier variants into one compact, stable semantic handle.
+
+### 9.8 prose
 
 Generates a human-readable prose description of an identifier.
 
@@ -225,7 +240,7 @@ Generates a human-readable prose description of an identifier.
   - No role/shape: capitalizes the noun phrase (e.g., `PersonName` -> "Person name")
 - `--format text` (default) outputs the prose string. `--format json` outputs a JSON object with `original`, `prose`, `tags`, `role`, and `shape` fields.
 
-### 9.8 graph
+### 9.9 graph
 
 Builds a tag co-occurrence graph from extracted identifiers.
 

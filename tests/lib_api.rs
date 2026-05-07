@@ -86,6 +86,16 @@ fn alias_via_lib() {
 }
 
 #[test]
+fn family_via_lib() {
+    let result = tagpath::family::generate_family("auth0__user__validate");
+    assert_eq!(result.canonical, "auth0_user_validate");
+    assert_eq!(result.tags, vec!["auth0", "user", "validate"]);
+    assert_eq!(result.dimensions.len(), 3);
+    assert_eq!(result.role, Some("validator".to_string()));
+    assert_eq!(result.aliases["camelCase"], "auth0UserValidate");
+}
+
+#[test]
 fn prose_via_lib() {
     let result = tagpath::prose::to_prose("create_user_profile");
     assert!(!result.prose.is_empty());

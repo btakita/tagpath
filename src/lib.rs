@@ -1,6 +1,7 @@
 pub mod alias;
 pub mod config;
 pub mod extract;
+pub mod family;
 pub mod graph;
 pub mod lint;
 pub mod parser;
