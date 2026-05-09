@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
-use tagpath::{family, parser};
+use tagpath::{compression, family, parser};
 
 const FIXTURE: &str = include_str!("../fixtures/tsift-token-savings.json");
 
@@ -85,6 +85,19 @@ fn tsift_token_savings_fixture_groups_symbols_by_tagpath_family() {
             case.name
         );
 
+        let report = compression::build_report(&compression_rows(&case.raw_symbols));
+        assert_eq!(report.family_count, case.tagpath_families.len());
+        let report_counts: BTreeMap<String, usize> = report
+            .families
+            .iter()
+            .map(|family| (family.canonical.clone(), family.count))
+            .collect();
+        assert_eq!(
+            report_counts, expected_counts,
+            "compression report counts must match fixture families for {}",
+            case.name
+        );
+
         for expected in &case.tagpath_families {
             let generated = family::generate_family(&expected.canonical);
             assert_eq!(
@@ -116,8 +129,8 @@ fn tsift_token_savings_fixture_compacts_all_preview_surfaces() {
     for case in &fixture.cases {
         let raw_preview = render_raw_preview(case);
         let tagpath_preview = render_tagpath_preview(case);
-        let raw_tokens = estimate_tokens(&raw_preview);
-        let tagpath_tokens = estimate_tokens(&tagpath_preview);
+        let raw_tokens = compression::estimate_tokens(&raw_preview);
+        let tagpath_tokens = compression::estimate_tokens(&tagpath_preview);
         let saved_percent = ((raw_tokens - tagpath_tokens) as f64 / raw_tokens as f64) * 100.0;
 
         assert!(
@@ -162,7 +175,7 @@ fn tsift_token_savings_context_pack_case_carries_handle_refs() {
 }
 
 fn render_raw_preview(case: &BenchmarkCase) -> String {
-    let mut preview = render_raw_symbol_preview(&case.raw_symbols);
+    let mut preview = compression::render_raw_symbol_preview(&compression_rows(&case.raw_symbols));
     if let Some(inputs) = &case.context_pack_inputs {
         preview.push('\n');
         preview.push_str(&serde_json::to_string(inputs).unwrap());
@@ -171,7 +184,8 @@ fn render_raw_preview(case: &BenchmarkCase) -> String {
 }
 
 fn render_tagpath_preview(case: &BenchmarkCase) -> String {
-    let mut preview = render_tagpath_family_alias_preview(&case.tagpath_families);
+    let report = compression::build_report(&compression_rows(&case.raw_symbols));
+    let mut preview = report.compact_preview;
     if let Some(inputs) = &case.context_pack_inputs {
         let section_rows = [
             ("next_context", inputs.next_context.len()),
@@ -190,49 +204,15 @@ fn render_tagpath_preview(case: &BenchmarkCase) -> String {
     preview
 }
 
-fn render_raw_symbol_preview(raw_symbols: &[RawSymbol]) -> String {
+fn compression_rows(raw_symbols: &[RawSymbol]) -> Vec<compression::RawSymbolRow> {
     raw_symbols
         .iter()
-        .map(|symbol| {
-            let convention = parser::detect_convention(&symbol.identifier);
-            let parsed = parser::parse(&symbol.identifier, convention);
-            let role = parsed.role.as_deref().unwrap_or("none");
-            let shape = parsed.shape.as_deref().unwrap_or("none");
-            format!(
-                "{}:{}\t{}\t{}\tconvention:{}\ttags:[{}]\trole:{}\tshape:{}",
-                symbol.file,
-                symbol.line,
-                symbol.context,
-                symbol.identifier,
-                parsed.convention,
-                parsed.tags.join(","),
-                role,
-                shape
-            )
+        .map(|symbol| compression::RawSymbolRow {
+            identifier: symbol.identifier.clone(),
+            file: symbol.file.clone().into(),
+            line: symbol.line,
+            column: 0,
+            context: Some(symbol.context.clone()),
         })
         .collect::<Vec<_>>()
-        .join("\n")
-}
-
-fn render_tagpath_family_alias_preview(families: &[ExpectedFamily]) -> String {
-    families
-        .iter()
-        .map(|family| {
-            let aliases = family
-                .aliases
-                .iter()
-                .map(|(convention, spelling)| format!("{convention}:{spelling}"))
-                .collect::<Vec<_>>()
-                .join(",");
-            format!(
-                "{}\tcount:{}\taliases:[{}]",
-                family.canonical, family.count, aliases
-            )
-        })
-        .collect::<Vec<_>>()
-        .join("\n")
-}
-
-fn estimate_tokens(output: &str) -> usize {
-    output.len().div_ceil(4)
 }

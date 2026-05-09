@@ -1,7 +1,8 @@
 use clap::{Parser, Subcommand};
-use std::path::PathBuf;
+use std::{io::Read, path::PathBuf};
 use tagpath::{
-    alias, config, extract, family, graph, lint, ontology, parser, prose, query, search,
+    alias, compression, config, extract, family, graph, lint, ontology, parser, prose, query,
+    search,
 };
 
 #[derive(Parser)]
@@ -85,6 +86,18 @@ enum Commands {
         #[arg(short, long, default_value = "text")]
         format: String,
     },
+    /// Group raw symbol rows and report family-preview compression savings
+    CompressionReport {
+        /// JSON file containing raw symbol rows, or '-' for stdin
+        #[arg(default_value = "-")]
+        input: PathBuf,
+        /// Output format (text, json)
+        #[arg(short, long, default_value = "text")]
+        format: String,
+        /// Maximum representative examples to keep per family
+        #[arg(long, default_value_t = 3)]
+        example_limit: usize,
+    },
     /// Generate a human-readable prose description of an identifier
     Prose {
         /// The identifier to describe
@@ -146,6 +159,11 @@ fn main() {
             format,
         } => cmd_alias(&name, convention.as_deref(), &format),
         Commands::Family { name, format } => cmd_family(&name, &format),
+        Commands::CompressionReport {
+            input,
+            format,
+            example_limit,
+        } => cmd_compression_report(&input, &format, example_limit),
         Commands::Prose { name, format } => cmd_prose(&name, &format),
         Commands::NormalizeQuery { query, format } => cmd_normalize_query(&query, &format),
         Commands::Ontology { path, format } => cmd_ontology(&path, &format),
@@ -345,6 +363,82 @@ fn cmd_family(name: &str, format: &str) {
             }
         }
     }
+}
+
+fn cmd_compression_report(input: &std::path::Path, format: &str, example_limit: usize) {
+    let input_text = match read_json_input(input) {
+        Ok(input_text) => input_text,
+        Err(error) => {
+            eprintln!("error: {error}");
+            std::process::exit(1);
+        }
+    };
+    let rows = match parse_raw_symbol_rows(&input_text) {
+        Ok(rows) => rows,
+        Err(error) => {
+            eprintln!("error: {error}");
+            std::process::exit(1);
+        }
+    };
+    let report = compression::build_report_with_example_limit(&rows, example_limit);
+    match format {
+        "json" => {
+            println!("{}", serde_json::to_string_pretty(&report).unwrap());
+        }
+        _ => {
+            println!("raw symbols:    {}", report.raw_symbol_count);
+            println!("families:       {}", report.family_count);
+            println!(
+                "bytes:          {} -> {} (saved {} / {:.1}%)",
+                report.metrics.raw_utf8_bytes,
+                report.metrics.compact_utf8_bytes,
+                report.metrics.saved_utf8_bytes,
+                report.metrics.byte_savings_percent
+            );
+            println!(
+                "tokens:         {} -> {} (saved {} / {:.1}%)",
+                report.metrics.raw_tokens,
+                report.metrics.compact_tokens,
+                report.metrics.saved_tokens,
+                report.metrics.token_savings_percent
+            );
+            if !report.compact_preview.is_empty() {
+                println!("families:");
+                println!("{}", report.compact_preview);
+            }
+        }
+    }
+}
+
+fn read_json_input(input: &std::path::Path) -> Result<String, String> {
+    if input == std::path::Path::new("-") {
+        let mut buffer = String::new();
+        std::io::stdin()
+            .read_to_string(&mut buffer)
+            .map_err(|error| format!("failed to read stdin: {error}"))?;
+        Ok(buffer)
+    } else {
+        std::fs::read_to_string(input)
+            .map_err(|error| format!("failed to read {}: {error}", input.display()))
+    }
+}
+
+fn parse_raw_symbol_rows(input: &str) -> Result<Vec<compression::RawSymbolRow>, String> {
+    let value: serde_json::Value =
+        serde_json::from_str(input).map_err(|error| format!("invalid JSON: {error}"))?;
+    if value.is_array() {
+        return serde_json::from_value(value)
+            .map_err(|error| format!("invalid raw symbol row array: {error}"));
+    }
+    if let Some(rows) = value.get("raw_symbols") {
+        return serde_json::from_value(rows.clone())
+            .map_err(|error| format!("invalid raw_symbols rows: {error}"));
+    }
+    if let Some(rows) = value.get("rows") {
+        return serde_json::from_value(rows.clone())
+            .map_err(|error| format!("invalid rows entries: {error}"));
+    }
+    Err("expected a JSON array or an object with raw_symbols/rows".to_string())
 }
 
 fn cmd_prose(name: &str, format: &str) {

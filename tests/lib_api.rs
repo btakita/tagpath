@@ -109,6 +109,32 @@ fn normalize_query_via_lib() {
 }
 
 #[test]
+fn compression_report_via_lib() {
+    let rows = vec![
+        tagpath::compression::RawSymbolRow {
+            identifier: "raw_symbol".to_string(),
+            file: "src/search.rs".into(),
+            line: 42,
+            column: 0,
+            context: Some("field".to_string()),
+        },
+        tagpath::compression::RawSymbolRow {
+            identifier: "rawSymbol".to_string(),
+            file: "src/search.ts".into(),
+            line: 7,
+            column: 0,
+            context: Some("field".to_string()),
+        },
+    ];
+    let report = tagpath::compression::build_report(&rows);
+    assert_eq!(report.raw_symbol_count, 2);
+    assert_eq!(report.family_count, 1);
+    assert_eq!(report.families[0].canonical, "raw_symbol");
+    assert_eq!(report.families[0].aliases["kebab-case"], "raw-symbol");
+    assert!(report.metrics.token_savings_percent > 0.0);
+}
+
+#[test]
 fn ontology_via_lib() {
     let dir = std::env::temp_dir().join("tagpath_lib_api_ontology");
     let _ = std::fs::remove_dir_all(&dir);

@@ -1,4 +1,5 @@
 pub mod alias;
+pub mod compression;
 pub mod config;
 pub mod extract;
 pub mod family;

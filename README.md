@@ -72,6 +72,9 @@ tagpath family "auth0__user__validate"
 # dimension 2: [validate] (validate)
 # role:      validator
 
+# Compare raw symbol rows with compact family previews
+tagpath compression-report symbols.json --format json
+
 # Human-readable prose descriptions
 tagpath prose create_user_profile
 # Creates a user profile
