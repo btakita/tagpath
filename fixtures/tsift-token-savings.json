@@ -155,6 +155,155 @@
           }
         }
       ]
+    },
+    {
+      "name": "context-pack-preview",
+      "surface": "context-pack",
+      "minimum_savings_percent": 55.0,
+      "raw_symbols": [
+        { "identifier": "context_pack_summary", "file": "src/main.rs", "line": 6948, "context": "symbol_ref" },
+        { "identifier": "contextPackSummary", "file": "src/context.ts", "line": 21, "context": "symbol_ref" },
+        { "identifier": "ContextPackSummary", "file": "src/context.go", "line": 32, "context": "symbol_ref" },
+        { "identifier": "context-pack-summary", "file": "src/context.css", "line": 6, "context": "symbol_ref" },
+        { "identifier": "CONTEXT_PACK_SUMMARY", "file": "src/context.rs", "line": 77, "context": "symbol_ref" },
+        { "identifier": "Context_Pack_Summary", "file": "src/context.adb", "line": 18, "context": "symbol_ref" },
+        { "identifier": "ontology_ref_handle", "file": "src/main.rs", "line": 7012, "context": "ontology_ref" },
+        { "identifier": "ontologyRefHandle", "file": "src/context.ts", "line": 46, "context": "ontology_ref" },
+        { "identifier": "OntologyRefHandle", "file": "src/context.go", "line": 53, "context": "ontology_ref" },
+        { "identifier": "ontology-ref-handle", "file": "src/context.css", "line": 12, "context": "ontology_ref" },
+        { "identifier": "ONTOLOGY_REF_HANDLE", "file": "src/context.rs", "line": 88, "context": "ontology_ref" },
+        { "identifier": "Ontology_Ref_Handle", "file": "src/context.adb", "line": 27, "context": "ontology_ref" },
+        { "identifier": "diff_digest_summary", "file": "src/diff_digest.rs", "line": 121, "context": "diff_ref" },
+        { "identifier": "diffDigestSummary", "file": "src/diff.ts", "line": 34, "context": "diff_ref" },
+        { "identifier": "DiffDigestSummary", "file": "src/diff.go", "line": 43, "context": "diff_ref" },
+        { "identifier": "diff-digest-summary", "file": "src/diff.css", "line": 8, "context": "diff_ref" },
+        { "identifier": "DIFF_DIGEST_SUMMARY", "file": "src/diff.rs", "line": 62, "context": "diff_ref" },
+        { "identifier": "Diff_Digest_Summary", "file": "src/diff.adb", "line": 15, "context": "diff_ref" }
+      ],
+      "tagpath_families": [
+        {
+          "canonical": "context_pack_summary",
+          "count": 6,
+          "aliases": {
+            "snake_case": "context_pack_summary",
+            "camelCase": "contextPackSummary",
+            "PascalCase": "ContextPackSummary",
+            "kebab-case": "context-pack-summary",
+            "UPPER_SNAKE_CASE": "CONTEXT_PACK_SUMMARY",
+            "Ada_Case": "Context_Pack_Summary"
+          }
+        },
+        {
+          "canonical": "diff_digest_summary",
+          "count": 6,
+          "aliases": {
+            "snake_case": "diff_digest_summary",
+            "camelCase": "diffDigestSummary",
+            "PascalCase": "DiffDigestSummary",
+            "kebab-case": "diff-digest-summary",
+            "UPPER_SNAKE_CASE": "DIFF_DIGEST_SUMMARY",
+            "Ada_Case": "Diff_Digest_Summary"
+          }
+        },
+        {
+          "canonical": "ontology_ref_handle",
+          "count": 6,
+          "aliases": {
+            "snake_case": "ontology_ref_handle",
+            "camelCase": "ontologyRefHandle",
+            "PascalCase": "OntologyRefHandle",
+            "kebab-case": "ontology-ref-handle",
+            "UPPER_SNAKE_CASE": "ONTOLOGY_REF_HANDLE",
+            "Ada_Case": "Ontology_Ref_Handle"
+          }
+        }
+      ],
+      "context_pack_inputs": {
+        "next_context": [
+          {
+            "prompt_target": "do [#ctxp]. spec-test-build-install-commit-push",
+            "touched_symbols": ["context_pack_summary", "contextPackSummary", "ContextPackSummary"],
+            "symbol_refs": [
+              {
+                "name": "context_pack_summary",
+                "file": "src/main.rs",
+                "line": 6948,
+                "tag_alias": "context/pack/summary",
+                "summary_refs": [
+                  {
+                    "handle": "sum-context-pack-summary",
+                    "path": ".tsift/summaries.db",
+                    "expand": "tsift summarize context_pack_summary"
+                  }
+                ],
+                "ontology_refs": [
+                  {
+                    "handle": "ont-context",
+                    "tag": "context",
+                    "path": ".naming/tags/context.md",
+                    "title": "Context",
+                    "domain": "retrieval"
+                  },
+                  {
+                    "handle": "ont-session",
+                    "tag": "session",
+                    "path": ".naming/tags/session.md",
+                    "title": "Session",
+                    "domain": "agent-doc"
+                  }
+                ]
+              }
+            ],
+            "expand": "tsift session-review --next-context tasks/software/tsift.md --json"
+          }
+        ],
+        "diff": [
+          {
+            "path": "src/main.rs",
+            "status": "modified",
+            "symbols": ["diff_digest_summary", "diffDigestSummary"],
+            "summary_refs": [
+              {
+                "handle": "sum-diff-digest-summary",
+                "path": ".tsift/summaries.db",
+                "expand": "tsift summarize diff_digest_summary"
+              }
+            ],
+            "ontology_refs": [
+              {
+                "handle": "ont-diff",
+                "tag": "diff",
+                "path": ".naming/tags/diff.md",
+                "title": "Diff",
+                "domain": "change-review"
+              }
+            ]
+          }
+        ],
+        "test": [
+          {
+            "runner": "cargo",
+            "command": "cargo test",
+            "signals": ["token_savings_fixture", "context_pack_preview"],
+            "artifact": {
+              "handle": "art-test-context-pack",
+              "path": ".tsift/artifacts/test-context-pack.log",
+              "expand": "tsift test-digest --path . --input .tsift/artifacts/test-context-pack.log"
+            }
+          }
+        ],
+        "log": [
+          {
+            "command": "cargo build --release",
+            "signals": ["ontology_ref_handle", "context_pack_summary"],
+            "artifact": {
+              "handle": "art-build-context-pack",
+              "path": ".tsift/artifacts/build-context-pack.log",
+              "expand": "tsift log-digest --path . --input .tsift/artifacts/build-context-pack.log"
+            }
+          }
+        ]
+      }
     }
   ]
 }

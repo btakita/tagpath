@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use tagpath::{family, parser};
 
 const FIXTURE: &str = include_str!("../fixtures/tsift-token-savings.json");
@@ -19,6 +19,8 @@ struct BenchmarkCase {
     minimum_savings_percent: f64,
     raw_symbols: Vec<RawSymbol>,
     tagpath_families: Vec<ExpectedFamily>,
+    #[serde(default)]
+    context_pack_inputs: Option<ContextPackInputs>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -36,6 +38,18 @@ struct ExpectedFamily {
     aliases: BTreeMap<String, String>,
 }
 
+#[derive(Debug, Deserialize, Serialize)]
+struct ContextPackInputs {
+    #[serde(default)]
+    next_context: Vec<serde_json::Value>,
+    #[serde(default)]
+    diff: Vec<serde_json::Value>,
+    #[serde(default)]
+    test: Vec<serde_json::Value>,
+    #[serde(default)]
+    log: Vec<serde_json::Value>,
+}
+
 #[test]
 fn tsift_token_savings_fixture_groups_symbols_by_tagpath_family() {
     let fixture: Fixture = serde_json::from_str(FIXTURE).unwrap();
@@ -46,7 +60,7 @@ fn tsift_token_savings_fixture_groups_symbols_by_tagpath_family() {
         assert!(
             matches!(
                 case.surface.as_str(),
-                "search" | "explain" | "session-review"
+                "search" | "explain" | "session-review" | "context-pack"
             ),
             "unexpected fixture surface in {}: {}",
             case.name,
@@ -83,17 +97,25 @@ fn tsift_token_savings_fixture_groups_symbols_by_tagpath_family() {
 }
 
 #[test]
-fn tsift_token_savings_fixture_compacts_search_explain_and_session_review_previews() {
+fn tsift_token_savings_fixture_compacts_all_preview_surfaces() {
     let fixture: Fixture = serde_json::from_str(FIXTURE).unwrap();
     assert_eq!(
         fixture.cases.len(),
-        3,
-        "fixture should cover search, explain, and session-review previews"
+        4,
+        "fixture should cover search, explain, session-review, and context-pack previews"
+    );
+    assert_eq!(
+        fixture
+            .cases
+            .iter()
+            .map(|case| case.surface.as_str())
+            .collect::<Vec<_>>(),
+        vec!["search", "explain", "session-review", "context-pack"]
     );
 
     for case in &fixture.cases {
-        let raw_preview = render_raw_symbol_preview(&case.raw_symbols);
-        let tagpath_preview = render_tagpath_family_alias_preview(&case.tagpath_families);
+        let raw_preview = render_raw_preview(case);
+        let tagpath_preview = render_tagpath_preview(case);
         let raw_tokens = estimate_tokens(&raw_preview);
         let tagpath_tokens = estimate_tokens(&tagpath_preview);
         let saved_percent = ((raw_tokens - tagpath_tokens) as f64 / raw_tokens as f64) * 100.0;
@@ -112,6 +134,60 @@ fn tsift_token_savings_fixture_compacts_search_explain_and_session_review_previe
             case.minimum_savings_percent
         );
     }
+}
+
+#[test]
+fn tsift_token_savings_context_pack_case_carries_handle_refs() {
+    let fixture: Fixture = serde_json::from_str(FIXTURE).unwrap();
+    let case = fixture
+        .cases
+        .iter()
+        .find(|case| case.surface == "context-pack")
+        .expect("fixture should include context-pack");
+    let inputs = case
+        .context_pack_inputs
+        .as_ref()
+        .expect("context-pack case should include raw context-pack inputs");
+
+    assert!(!inputs.next_context.is_empty());
+    assert!(!inputs.diff.is_empty());
+    assert!(!inputs.test.is_empty());
+    assert!(!inputs.log.is_empty());
+
+    let raw = serde_json::to_string(inputs).unwrap();
+    assert!(raw.contains("ontology_refs"));
+    assert!(raw.contains(".naming/tags/"));
+    assert!(raw.contains("summary_refs"));
+    assert!(raw.contains("artifact"));
+}
+
+fn render_raw_preview(case: &BenchmarkCase) -> String {
+    let mut preview = render_raw_symbol_preview(&case.raw_symbols);
+    if let Some(inputs) = &case.context_pack_inputs {
+        preview.push('\n');
+        preview.push_str(&serde_json::to_string(inputs).unwrap());
+    }
+    preview
+}
+
+fn render_tagpath_preview(case: &BenchmarkCase) -> String {
+    let mut preview = render_tagpath_family_alias_preview(&case.tagpath_families);
+    if let Some(inputs) = &case.context_pack_inputs {
+        let section_rows = [
+            ("next_context", inputs.next_context.len()),
+            ("diff", inputs.diff.len()),
+            ("test", inputs.test.len()),
+            ("log", inputs.log.len()),
+        ]
+        .into_iter()
+        .filter(|(_, count)| *count > 0)
+        .map(|(section, count)| format!("{section}\tcount:{count}\texpand:tsift {section}"))
+        .collect::<Vec<_>>()
+        .join("\n");
+        preview.push('\n');
+        preview.push_str(&section_rows);
+    }
+    preview
 }
 
 fn render_raw_symbol_preview(raw_symbols: &[RawSymbol]) -> String {
