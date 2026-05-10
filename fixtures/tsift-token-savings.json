@@ -304,6 +304,160 @@
           }
         ]
       }
+    },
+    {
+      "name": "normalize-query-preview",
+      "surface": "normalize-query",
+      "minimum_savings_percent": 50.0,
+      "raw_symbols": [
+        { "identifier": "normalize_query_input", "file": "src/query.rs", "line": 18, "context": "query_input" },
+        { "identifier": "normalizeQueryInput", "file": "src/query.ts", "line": 27, "context": "query_input" },
+        { "identifier": "NormalizeQueryInput", "file": "src/query.go", "line": 33, "context": "query_input" },
+        { "identifier": "normalize-query-input", "file": "src/query.css", "line": 9, "context": "query_input" },
+        { "identifier": "NORMALIZE_QUERY_INPUT", "file": "src/query.rs", "line": 44, "context": "query_input" },
+        { "identifier": "Normalize_Query_Input", "file": "src/query.adb", "line": 21, "context": "query_input" },
+        { "identifier": "ontology_ref_handle", "file": "src/query.rs", "line": 59, "context": "ontology_ref" },
+        { "identifier": "ontologyRefHandle", "file": "src/query.ts", "line": 66, "context": "ontology_ref" },
+        { "identifier": "OntologyRefHandle", "file": "src/query.go", "line": 73, "context": "ontology_ref" },
+        { "identifier": "ontology-ref-handle", "file": "src/query.css", "line": 16, "context": "ontology_ref" },
+        { "identifier": "ONTOLOGY_REF_HANDLE", "file": "src/query.rs", "line": 81, "context": "ontology_ref" },
+        { "identifier": "Ontology_Ref_Handle", "file": "src/query.adb", "line": 29, "context": "ontology_ref" },
+        { "identifier": "query_tag_weight", "file": "src/query.rs", "line": 94, "context": "normalized_tag" },
+        { "identifier": "queryTagWeight", "file": "src/query.ts", "line": 101, "context": "normalized_tag" },
+        { "identifier": "QueryTagWeight", "file": "src/query.go", "line": 112, "context": "normalized_tag" },
+        { "identifier": "query-tag-weight", "file": "src/query.css", "line": 23, "context": "normalized_tag" },
+        { "identifier": "QUERY_TAG_WEIGHT", "file": "src/query.rs", "line": 128, "context": "normalized_tag" },
+        { "identifier": "Query_Tag_Weight", "file": "src/query.adb", "line": 37, "context": "normalized_tag" }
+      ],
+      "tagpath_families": [
+        {
+          "canonical": "normalize_query_input",
+          "count": 6,
+          "aliases": {
+            "snake_case": "normalize_query_input",
+            "camelCase": "normalizeQueryInput",
+            "PascalCase": "NormalizeQueryInput",
+            "kebab-case": "normalize-query-input",
+            "UPPER_SNAKE_CASE": "NORMALIZE_QUERY_INPUT",
+            "Ada_Case": "Normalize_Query_Input"
+          }
+        },
+        {
+          "canonical": "ontology_ref_handle",
+          "count": 6,
+          "aliases": {
+            "snake_case": "ontology_ref_handle",
+            "camelCase": "ontologyRefHandle",
+            "PascalCase": "OntologyRefHandle",
+            "kebab-case": "ontology-ref-handle",
+            "UPPER_SNAKE_CASE": "ONTOLOGY_REF_HANDLE",
+            "Ada_Case": "Ontology_Ref_Handle"
+          }
+        },
+        {
+          "canonical": "query_tag_weight",
+          "count": 6,
+          "aliases": {
+            "snake_case": "query_tag_weight",
+            "camelCase": "queryTagWeight",
+            "PascalCase": "QueryTagWeight",
+            "kebab-case": "query-tag-weight",
+            "UPPER_SNAKE_CASE": "QUERY_TAG_WEIGHT",
+            "Ada_Case": "Query_Tag_Weight"
+          }
+        }
+      ],
+      "normalize_query_input": "normalize-query contextPackSummary ontology_ref_handle query_tag_weight .naming/tags/context.md",
+      "expected_query_tags": ["normalize", "query", "context", "pack", "summary", "ontology", "ref", "handle", "tag", "weight", "naming", "tags"]
+    },
+    {
+      "name": "ontology-refs-preview",
+      "surface": "ontology-refs",
+      "minimum_savings_percent": 50.0,
+      "raw_symbols": [
+        { "identifier": "naming_tag_ref", "file": "src/ontology.rs", "line": 14, "context": "ontology_ref" },
+        { "identifier": "namingTagRef", "file": "src/ontology.ts", "line": 22, "context": "ontology_ref" },
+        { "identifier": "NamingTagRef", "file": "src/ontology.go", "line": 30, "context": "ontology_ref" },
+        { "identifier": "naming-tag-ref", "file": "src/ontology.css", "line": 5, "context": "ontology_ref" },
+        { "identifier": "NAMING_TAG_REF", "file": "src/ontology.rs", "line": 41, "context": "ontology_ref" },
+        { "identifier": "Naming_Tag_Ref", "file": "src/ontology.adb", "line": 17, "context": "ontology_ref" },
+        { "identifier": "ontology_ref_handle", "file": "src/ontology.rs", "line": 55, "context": "ontology_ref" },
+        { "identifier": "ontologyRefHandle", "file": "src/ontology.ts", "line": 64, "context": "ontology_ref" },
+        { "identifier": "OntologyRefHandle", "file": "src/ontology.go", "line": 75, "context": "ontology_ref" },
+        { "identifier": "ontology-ref-handle", "file": "src/ontology.css", "line": 12, "context": "ontology_ref" },
+        { "identifier": "ONTOLOGY_REF_HANDLE", "file": "src/ontology.rs", "line": 87, "context": "ontology_ref" },
+        { "identifier": "Ontology_Ref_Handle", "file": "src/ontology.adb", "line": 25, "context": "ontology_ref" },
+        { "identifier": "tag_definition_path", "file": "src/ontology.rs", "line": 103, "context": "ontology_path" },
+        { "identifier": "tagDefinitionPath", "file": "src/ontology.ts", "line": 111, "context": "ontology_path" },
+        { "identifier": "TagDefinitionPath", "file": "src/ontology.go", "line": 119, "context": "ontology_path" },
+        { "identifier": "tag-definition-path", "file": "src/ontology.css", "line": 19, "context": "ontology_path" },
+        { "identifier": "TAG_DEFINITION_PATH", "file": "src/ontology.rs", "line": 133, "context": "ontology_path" },
+        { "identifier": "Tag_Definition_Path", "file": "src/ontology.adb", "line": 34, "context": "ontology_path" }
+      ],
+      "tagpath_families": [
+        {
+          "canonical": "naming_tag_ref",
+          "count": 6,
+          "aliases": {
+            "snake_case": "naming_tag_ref",
+            "camelCase": "namingTagRef",
+            "PascalCase": "NamingTagRef",
+            "kebab-case": "naming-tag-ref",
+            "UPPER_SNAKE_CASE": "NAMING_TAG_REF",
+            "Ada_Case": "Naming_Tag_Ref"
+          }
+        },
+        {
+          "canonical": "ontology_ref_handle",
+          "count": 6,
+          "aliases": {
+            "snake_case": "ontology_ref_handle",
+            "camelCase": "ontologyRefHandle",
+            "PascalCase": "OntologyRefHandle",
+            "kebab-case": "ontology-ref-handle",
+            "UPPER_SNAKE_CASE": "ONTOLOGY_REF_HANDLE",
+            "Ada_Case": "Ontology_Ref_Handle"
+          }
+        },
+        {
+          "canonical": "tag_definition_path",
+          "count": 6,
+          "aliases": {
+            "snake_case": "tag_definition_path",
+            "camelCase": "tagDefinitionPath",
+            "PascalCase": "TagDefinitionPath",
+            "kebab-case": "tag-definition-path",
+            "UPPER_SNAKE_CASE": "TAG_DEFINITION_PATH",
+            "Ada_Case": "Tag_Definition_Path"
+          }
+        }
+      ],
+      "ontology_refs": [
+        {
+          "handle": "ont-context",
+          "tag": "context",
+          "path": ".naming/tags/context.md",
+          "title": "Context",
+          "domain": "retrieval",
+          "summary": "Long-form guidance for context tags, including when a session handoff should preserve a compact reference to prior conversation state instead of repeating every retrieved paragraph."
+        },
+        {
+          "handle": "ont-query",
+          "tag": "query",
+          "path": ".naming/tags/query.md",
+          "title": "Query",
+          "domain": "retrieval",
+          "summary": "Long-form guidance for query tags, including normalized query input, weighted tag ranking, source token provenance, and fallback search behavior for downstream tools."
+        },
+        {
+          "handle": "ont-ontology",
+          "tag": "ontology",
+          "path": ".naming/tags/ontology.md",
+          "title": "Ontology",
+          "domain": "naming",
+          "summary": "Long-form guidance for ontology tags, including stable markdown paths, tag declarations, validation diagnostics, aliases, and compact handle references in summaries."
+        }
+      ]
     }
   ]
 }

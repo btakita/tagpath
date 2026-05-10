@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
-use tagpath::{compression, family, parser};
+use tagpath::{compression, family, parser, query};
 
 const FIXTURE: &str = include_str!("../fixtures/tsift-token-savings.json");
 
@@ -21,6 +21,12 @@ struct BenchmarkCase {
     tagpath_families: Vec<ExpectedFamily>,
     #[serde(default)]
     context_pack_inputs: Option<ContextPackInputs>,
+    #[serde(default)]
+    normalize_query_input: Option<String>,
+    #[serde(default)]
+    expected_query_tags: Vec<String>,
+    #[serde(default)]
+    ontology_refs: Vec<OntologyRef>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -50,6 +56,17 @@ struct ContextPackInputs {
     log: Vec<serde_json::Value>,
 }
 
+#[derive(Debug, Deserialize, Serialize)]
+struct OntologyRef {
+    handle: String,
+    tag: String,
+    path: String,
+    title: String,
+    domain: String,
+    #[serde(default)]
+    summary: Option<String>,
+}
+
 #[test]
 fn tsift_token_savings_fixture_groups_symbols_by_tagpath_family() {
     let fixture: Fixture = serde_json::from_str(FIXTURE).unwrap();
@@ -60,7 +77,12 @@ fn tsift_token_savings_fixture_groups_symbols_by_tagpath_family() {
         assert!(
             matches!(
                 case.surface.as_str(),
-                "search" | "explain" | "session-review" | "context-pack"
+                "search"
+                    | "explain"
+                    | "session-review"
+                    | "context-pack"
+                    | "normalize-query"
+                    | "ontology-refs"
             ),
             "unexpected fixture surface in {}: {}",
             case.name,
@@ -114,8 +136,8 @@ fn tsift_token_savings_fixture_compacts_all_preview_surfaces() {
     let fixture: Fixture = serde_json::from_str(FIXTURE).unwrap();
     assert_eq!(
         fixture.cases.len(),
-        4,
-        "fixture should cover search, explain, session-review, and context-pack previews"
+        6,
+        "fixture should cover search, explain, session-review, context-pack, normalize-query, and ontology-refs previews"
     );
     assert_eq!(
         fixture
@@ -123,7 +145,14 @@ fn tsift_token_savings_fixture_compacts_all_preview_surfaces() {
             .iter()
             .map(|case| case.surface.as_str())
             .collect::<Vec<_>>(),
-        vec!["search", "explain", "session-review", "context-pack"]
+        vec![
+            "search",
+            "explain",
+            "session-review",
+            "context-pack",
+            "normalize-query",
+            "ontology-refs"
+        ]
     );
 
     for case in &fixture.cases {
@@ -174,11 +203,74 @@ fn tsift_token_savings_context_pack_case_carries_handle_refs() {
     assert!(raw.contains("artifact"));
 }
 
+#[test]
+fn tsift_token_savings_query_and_ontology_cases_stay_handle_sized() {
+    let fixture: Fixture = serde_json::from_str(FIXTURE).unwrap();
+    let query_case = fixture
+        .cases
+        .iter()
+        .find(|case| case.surface == "normalize-query")
+        .expect("fixture should include normalize-query");
+    let input = query_case
+        .normalize_query_input
+        .as_ref()
+        .expect("normalize-query case should include input");
+    let normalized = query::normalize_query(input);
+    let observed = normalized
+        .tags
+        .iter()
+        .map(|tag| tag.tag.as_str())
+        .collect::<Vec<_>>();
+    for expected in &query_case.expected_query_tags {
+        assert!(
+            observed.contains(&expected.as_str()),
+            "normalize-query fixture should emit {expected:?}: {observed:?}"
+        );
+    }
+    assert!(
+        normalized.tags.iter().any(|tag| tag
+            .sources
+            .iter()
+            .any(|source| source == "ontology_ref_handle")),
+        "identifier-shaped query input should preserve source handles"
+    );
+
+    let ontology_case = fixture
+        .cases
+        .iter()
+        .find(|case| case.surface == "ontology-refs")
+        .expect("fixture should include ontology-refs");
+    assert!(!ontology_case.ontology_refs.is_empty());
+    for ontology_ref in &ontology_case.ontology_refs {
+        assert!(ontology_ref.handle.starts_with("ont-"));
+        assert!(ontology_ref.path.starts_with(".naming/tags/"));
+        assert!(ontology_ref.path.ends_with(".md"));
+    }
+    let compact_preview = render_tagpath_preview(ontology_case);
+    assert!(
+        compact_preview.contains("ontology_ref\tont-context\tcontext\t.naming/tags/context.md")
+    );
+    assert!(compact_preview.contains("ontology_ref\tont-query\tquery\t.naming/tags/query.md"));
+    assert!(
+        !compact_preview.contains("summary:"),
+        "compact ontology preview should keep handles instead of inline prose"
+    );
+}
+
 fn render_raw_preview(case: &BenchmarkCase) -> String {
     let mut preview = compression::render_raw_symbol_preview(&compression_rows(&case.raw_symbols));
     if let Some(inputs) = &case.context_pack_inputs {
         preview.push('\n');
         preview.push_str(&serde_json::to_string(inputs).unwrap());
+    }
+    if let Some(input) = &case.normalize_query_input {
+        preview.push('\n');
+        preview.push_str("normalize_query_input: ");
+        preview.push_str(input);
+    }
+    if !case.ontology_refs.is_empty() {
+        preview.push('\n');
+        preview.push_str(&serde_json::to_string(&case.ontology_refs).unwrap());
     }
     preview
 }
@@ -200,6 +292,35 @@ fn render_tagpath_preview(case: &BenchmarkCase) -> String {
         .join("\n");
         preview.push('\n');
         preview.push_str(&section_rows);
+    }
+    if let Some(input) = &case.normalize_query_input {
+        let query_rows = query::normalize_query_tags(input)
+            .into_iter()
+            .filter(|tag| {
+                case.expected_query_tags
+                    .iter()
+                    .any(|expected| expected == &tag.tag)
+            })
+            .map(|tag| format!("query_tag\t{}\tweight:{:.1}", tag.tag, tag.weight))
+            .collect::<Vec<_>>()
+            .join("\n");
+        preview.push('\n');
+        preview.push_str(&query_rows);
+    }
+    if !case.ontology_refs.is_empty() {
+        let ontology_rows = case
+            .ontology_refs
+            .iter()
+            .map(|ontology_ref| {
+                format!(
+                    "ontology_ref\t{}\t{}\t{}",
+                    ontology_ref.handle, ontology_ref.tag, ontology_ref.path
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        preview.push('\n');
+        preview.push_str(&ontology_rows);
     }
     preview
 }
