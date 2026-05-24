@@ -305,11 +305,47 @@ All other supported languages (25 of 39 presets) use regex-based identifier extr
 - Use `--ast` flag with `tagpath extract` to enable tree-sitter mode
 - AST extraction classifies identifiers by context (function, type, variable, etc.)
 
+## WASM build
+
+Tagpath compiles to `wasm32-unknown-unknown` and ships a small JS-friendly
+API. The wasm build has no filesystem dependency — callers extract
+identifiers on the host (for example via ts-morph) and pass them in.
+
+```sh
+# Plain cargo build (verifies the wasm target compiles)
+cargo build --target wasm32-unknown-unknown --no-default-features --features wasm
+
+# Build a Node-targeted pkg/ with wasm-pack
+wasm-pack build --target nodejs --no-default-features --features wasm
+```
+
+Then from JS:
+
+```js
+import { parse, alias, prose, normalize_query, search_over_rows } from "./pkg/tagpath.js";
+
+console.log(parse("createUserProfile"));
+console.log(alias("create_user_profile"));
+console.log(prose("create_user_profile"));
+console.log(normalize_query("create user profile"));
+
+const rows = JSON.stringify([
+  { name: "createUser", path: "src/a.ts", line: 10 },
+  { name: "deleteUser", path: "src/a.ts", line: 20 },
+  { name: "createPost", path: "src/b.ts", line: 30 },
+]);
+console.log(search_over_rows("user", rows));
+```
+
+See `SPEC.md` § 13 for the exposed surface and the no-filesystem rule for
+`search_over_rows`.
+
 ## Roadmap
 
 - **Phase 1** ✅ — Parse, detect conventions, semantic equivalence
 - **Phase 2** ✅ — tree-sitter integration, lint command, extract identifiers, semantic search, composable configs
 - **Phase 3** ✅ — Alias generation, prose conversion, tag co-occurrence graph
+- **Phase 4** ✅ — Index, MCP server, WASM packaging
 
 ## License
 

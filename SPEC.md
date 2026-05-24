@@ -394,3 +394,54 @@ extends = ["rust", "custom"] # extend multiple presets (applied left to right)
 4. Context-level merging: `[contexts.<name>]` sections merge with inherited contexts. Only the fields specified in the extending config replace the parent values; unspecified fields are retained from the parent.
 5. Top-level fields (`convention`, `immutable`, `singular`, etc.) are fully replaced if present in the extending config.
 6. `[tags.declared]` entries merge additively — the extending config can add new tag declarations without removing inherited ones.
+
+## 13. WASM
+
+Tagpath compiles to `wasm32-unknown-unknown` and exposes a small JS-friendly
+API via `wasm-bindgen`. The wasm build is filesystem-free: tree-sitter, the
+`extract` walker, `search`, `lint`, `index`, `graph`, `ontology`, and `mcp`
+are all gated out of the wasm target so the resulting `.wasm` artifact stays
+small and has no host syscalls.
+
+### 13.1 Feature flag
+
+Enable with `--no-default-features --features wasm`. The `wasm` feature pulls
+in `wasm-bindgen`, `serde-wasm-bindgen`, and `js-sys` as optional dependencies
+and is mutually exclusive with the `lang-*` tree-sitter features in practice
+(the wasm build deliberately drops them).
+
+### 13.2 Exposed surface
+
+All functions are exported as `#[wasm_bindgen]` from `tagpath::wasm`:
+
+| Function | Purpose |
+|----------|---------|
+| `parse(name, convention?)` | Returns the `ParsedName` shape as a JS object. If `convention` is omitted or unknown, the convention is auto-detected. |
+| `alias(name, target_convention?)` | Returns an `AliasResult { tags, aliases }` object. With no target, every supported convention is emitted. |
+| `prose(name)` | Returns the human-readable prose string. |
+| `normalize_query(query)` | Returns a `NormalizedQuery { original, tags[] }` object with ranked canonical tags. |
+| `search_over_rows(query, rows_json)` | Filters a caller-supplied JSON array of `{ name, path?, line? }` rows. Returns the matching rows enriched with `convention`, `tags`, `role`, and `shape`. |
+
+Convention strings use the canonical Display form: `snake_case`, `camelCase`,
+`PascalCase`, `kebab-case`, `UPPER_SNAKE_CASE`, `Ada_Case`. Alias map keys use
+the same Display form, not the serde `snake_case` rename.
+
+### 13.3 No-filesystem rule for `search_over_rows`
+
+The wasm build intentionally does **not** scan the filesystem. The host
+environment (Node, a browser, ts-morph, or an agent harness) is responsible
+for collecting candidate identifiers and passing them in as a JSON array.
+This keeps the wasm artifact decoupled from tree-sitter grammars and avoids
+needing a virtual filesystem shim.
+
+### 13.4 Build command
+
+```sh
+cargo build --target wasm32-unknown-unknown --no-default-features --features wasm
+
+# With wasm-pack (Node target):
+wasm-pack build --target nodejs --no-default-features --features wasm
+```
+
+The `[lib] crate-type = ["cdylib", "rlib"]` setting is required so `wasm-pack`
+can emit a cdylib alongside the regular rlib used by native consumers.

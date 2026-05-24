@@ -1,6 +1,6 @@
 [package]
 name = "tagpath"
-version = "0.8.0"
+version = "0.9.0"
 edition = "2024"
 description = "Tag Path — parse, lint, and search tag-based identifiers across languages"
 license = "MIT"
@@ -8,9 +8,18 @@ repository = "https://github.com/btakita/tagpath"
 keywords = ["naming", "convention", "identifier", "parser", "lint"]
 categories = ["command-line-utilities", "development-tools"]
 
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[[bin]]
+name = "tagpath"
+path = "src/main.rs"
+required-features = ["treesitter"]
+
 [features]
 default = ["lang-rust", "lang-python", "lang-javascript", "lang-typescript", "lang-go", "lang-c", "lang-cpp", "lang-java", "lang-ruby", "lang-php", "lang-csharp", "lang-swift", "lang-kotlin", "mcp"]
 mcp = []
+wasm = ["dep:wasm-bindgen", "dep:serde-wasm-bindgen", "dep:js-sys"]
 treesitter = ["dep:tree-sitter"]
 lang-rust = ["treesitter", "dep:tree-sitter-rust"]
 lang-python = ["treesitter", "dep:tree-sitter-python"]
@@ -49,3 +58,6 @@ tree-sitter-kotlin-ng = { version = "1.1", optional = true }
 petgraph = "0.8"
 walkdir = "2"
 sha2 = "0.10"
+wasm-bindgen = { version = "0.2", optional = true }
+serde-wasm-bindgen = { version = "0.6", optional = true }
+js-sys = { version = "0.3", optional = true }

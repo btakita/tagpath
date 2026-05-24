@@ -1,16 +1,26 @@
 pub mod alias;
 pub mod compression;
 pub mod config;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod extract;
 pub mod family;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod graph;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod index;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod lint;
-#[cfg(feature = "mcp")]
+#[cfg(all(feature = "mcp", not(target_arch = "wasm32")))]
 pub mod mcp;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod ontology;
 pub mod parser;
 pub mod prose;
 pub mod query;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod search;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod treesitter;
+
+#[cfg(target_arch = "wasm32")]
+pub mod wasm;
