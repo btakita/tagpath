@@ -168,6 +168,8 @@ tagpath prose <NAME> [--format text|json]
 tagpath normalize-query <QUERY> [--format text|json]
 tagpath ontology [<PATH>] [--format text|json]
 tagpath graph [<PATH>] [--format text|dot|json] [--query <QUERY>]
+tagpath index [<PATH>] [--check] [--force]
+tagpath search <QUERY> <PATH> [--index]
 ```
 
 ### 9.1 parse
@@ -290,6 +292,28 @@ Builds a tag co-occurrence graph from extracted identifiers.
 - Optional `--query` flag filters to a subgraph: seed nodes matching query tags plus their direct 1-hop neighbors.
 - `--format dot` (default for `text`) outputs Graphviz DOT format.
 - `--format json` outputs a JSON object with `nodes` (sorted array) and `edges` (array of `{from, to, weight}` objects).
+
+### 9.13 index
+
+Builds a persistent project snapshot at `.naming/index.json`, alongside the resolved `.naming.toml`.
+
+- `<PATH>` defaults to `.`. Tagpath walks upward until it finds `.naming.toml`; that directory is the project root and the index is written to `<root>/.naming/index.json`.
+- The on-disk schema is JSON with stable key order (`schema_version`, `generated_at`, `config_fingerprint`, `tool_version`, `sources`, `families`, `ontology_refs`). `schema_version` is the integer `1` for this release.
+- `config_fingerprint` is `sha256:` of the canonical TOML serialization of the resolved config (post-`extends` merge). Any change to `.naming.toml` or any extended file flips the fingerprint.
+- `sources` lists every source file scanned (the same set `tagpath extract` would walk: known language extensions, skipping `.git`, `node_modules`, `target`, `__pycache__`, `.venv`, `vendor`, and other hidden directories). Each entry records the project-relative path, a `sha256:` hash of the file bytes, the filesystem mtime in UNIX seconds, and the file size in bytes. Entries are sorted by path for determinism.
+- `families` groups the extracted identifiers by canonical tag sequence using the same parser as `tagpath family`. Each family has a stable `family_id`, the lowercase canonical `tags`, and an ordered list of `members` (each with `name`, `convention`, project-relative `path`, and 1-based `line`). Members are sorted by `(path, line, name)` and deduplicated.
+- `ontology_refs` mirrors the records from `tagpath ontology` — one entry per `.naming/tags/*.md` file, with the canonical `tag`, project-relative `path`, and a `sha256:` hash of the markdown bytes. Sorted by `tag`.
+- `--check`: recomputes the fingerprint and per-source hashes and exits `0` if the on-disk index is still fresh, `1` otherwise. The stale report lists each reason: `index_missing`, `index_unreadable`, `schema_version`, `config_changed`, `tool_version`, `source_added`, `source_removed`, or `source_modified`. `--check` never writes.
+- `--force`: rebuilds even when the on-disk index would still pass a freshness check.
+- Without flags, `tagpath index` rebuilds only when stale, otherwise prints `index is already fresh`.
+
+### 9.14 search --index
+
+When `--index` is passed, `tagpath search` reads `.naming/index.json` instead of rescanning the source tree.
+
+- Tagpath first locates the project root by walking up for `.naming.toml`, then expects the index at `<root>/.naming/index.json`.
+- The index is freshness-checked before use. If it is missing, unreadable, or stale (config fingerprint mismatch, schema mismatch, or any source added/removed/modified), `tagpath search --index` exits `2` with a clear error telling the user to run `tagpath index`.
+- When the index is fresh, results come directly from the persisted families (no rescanning). Match semantics are identical to live search: every query tag must appear in the family's tag list.
 
 ## 10. Tsift Token-Savings Benchmark Fixture
 

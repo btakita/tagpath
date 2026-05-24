@@ -195,6 +195,36 @@ fn extract_from_file_ast(path: &Path) -> Vec<ExtractedIdentifier> {
         .collect()
 }
 
+/// List source files under a path, applying the same filters as `extract_from_path`.
+pub fn list_source_files(path: &Path) -> Vec<PathBuf> {
+    if path.is_file() {
+        return if is_source_file(path) {
+            vec![path.to_path_buf()]
+        } else {
+            vec![]
+        };
+    }
+    let mut results = Vec::new();
+    for entry in WalkDir::new(path)
+        .into_iter()
+        .filter_entry(|e| !is_skipped_dir(e))
+    {
+        let entry = match entry {
+            Ok(e) => e,
+            Err(_) => continue,
+        };
+        if !entry.file_type().is_file() {
+            continue;
+        }
+        if !is_source_file(entry.path()) {
+            continue;
+        }
+        results.push(entry.path().to_path_buf());
+    }
+    results.sort();
+    results
+}
+
 /// Check if a walkdir entry is a directory we should skip
 fn is_skipped_dir(entry: &walkdir::DirEntry) -> bool {
     if !entry.file_type().is_dir() {

@@ -97,6 +97,12 @@ tagpath graph src/ --format dot       # DOT output for Graphviz
 tagpath graph src/ --format json      # JSON nodes + edges
 tagpath graph src/ --query "user"     # subgraph around "user" tag
 
+# Build a persistent project index (.naming/index.json)
+tagpath index                          # build or refresh when stale
+tagpath index --check                  # exit 0 if fresh, 1 if stale
+tagpath index --force                  # rebuild even when fresh
+tagpath search "user" . --index        # query the persisted index instead of rescanning
+
 # Initialize a .naming.toml
 tagpath init --lang typescript
 tagpath init --preset immutable-tag
@@ -124,6 +130,7 @@ tagpath init --preset immutable-tag
 - **Query normalization** — turn free-text agent prompts into ordered, weighted canonical tags
 - **Tag ontology** — load `.naming/tags/*.md` domain tags and validate them against `.naming.toml`
 - **Tag graph** — co-occurrence graph of tag relationships across a codebase (petgraph, DOT/JSON output)
+- **Persistent index** — `tagpath index` snapshots sources, families, ontology refs, and a config fingerprint to `.naming/index.json` for cheap freshness checks (`--check`) and fast indexed search (`search --index`)
 
 ## Language Presets
 

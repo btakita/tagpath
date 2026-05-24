@@ -1,8 +1,8 @@
 use clap::{Parser, Subcommand};
 use std::{io::Read, path::PathBuf};
 use tagpath::{
-    alias, compression, config, extract, family, graph, lint, ontology, parser, prose, query,
-    search,
+    alias, compression, config, extract, family, graph, index, lint, ontology, parser, prose,
+    query, search,
 };
 
 #[derive(Parser)]
@@ -66,6 +66,21 @@ enum Commands {
         /// Output format (text, json, family, family-json)
         #[arg(short, long, default_value = "text")]
         format: String,
+        /// Read from the persisted .naming/index.json instead of rescanning
+        #[arg(long)]
+        index: bool,
+    },
+    /// Build, check, or rebuild the persistent project index (.naming/index.json)
+    Index {
+        /// Project path (defaults to current directory)
+        #[arg(default_value = ".")]
+        path: PathBuf,
+        /// Recompute fingerprint/hashes and exit 0 if fresh, 1 if stale. Does not write.
+        #[arg(long)]
+        check: bool,
+        /// Rebuild even if the on-disk index is still fresh
+        #[arg(long)]
+        force: bool,
     },
     /// Generate aliases for an identifier in all naming conventions
     Alias {
@@ -152,7 +167,9 @@ fn main() {
             query,
             path,
             format,
-        } => cmd_search(&query, &path, &format),
+            index,
+        } => cmd_search(&query, &path, &format, index),
+        Commands::Index { path, check, force } => cmd_index(&path, check, force),
         Commands::Alias {
             name,
             convention,
@@ -537,7 +554,11 @@ fn cmd_graph(path: &std::path::Path, format: &str, query: Option<&str>) {
     }
 }
 
-fn cmd_search(query: &str, path: &std::path::Path, format: &str) {
+fn cmd_search(query: &str, path: &std::path::Path, format: &str, use_index: bool) {
+    if use_index {
+        cmd_search_index(query, path, format);
+        return;
+    }
     match format {
         "family-json" => {
             let families = search::search_families(query, path);
@@ -563,6 +584,145 @@ fn cmd_search(query: &str, path: &std::path::Path, format: &str) {
                 );
             }
         }
+    }
+}
+
+fn cmd_search_index(query: &str, path: &std::path::Path, format: &str) {
+    let project_root = match index::find_project_root(path) {
+        Some(root) => root,
+        None => {
+            eprintln!(
+                "error: no .naming.toml found (searched from {} upward); run `tagpath init`",
+                path.display()
+            );
+            std::process::exit(2);
+        }
+    };
+    let idx_path = index::index_path(&project_root);
+    if !idx_path.exists() {
+        eprintln!(
+            "error: no index found at {}; run `tagpath index` first",
+            idx_path.display()
+        );
+        std::process::exit(2);
+    }
+    let report = match index::check(&project_root) {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("error: {e}");
+            std::process::exit(2);
+        }
+    };
+    if !report.fresh {
+        eprintln!("error: index is stale; run `tagpath index` to rebuild");
+        for reason in &report.stale_reasons {
+            eprintln!("  - {}", format_stale_reason(reason));
+        }
+        std::process::exit(2);
+    }
+    let idx = match index::read(&idx_path) {
+        Ok(i) => i,
+        Err(e) => {
+            eprintln!("error: {e}");
+            std::process::exit(2);
+        }
+    };
+    let hits = index::search_index(&idx, query);
+    match format {
+        "json" => {
+            println!("{}", serde_json::to_string_pretty(&hits).unwrap());
+        }
+        _ => {
+            for hit in &hits {
+                println!(
+                    "{}:{}\t{}\t{}",
+                    hit.path, hit.line, hit.name, hit.convention,
+                );
+            }
+        }
+    }
+}
+
+fn cmd_index(path: &std::path::Path, check: bool, force: bool) {
+    let project_root = match index::find_project_root(path) {
+        Some(root) => root,
+        None => {
+            eprintln!(
+                "error: no .naming.toml found (searched from {} upward); run `tagpath init`",
+                path.display()
+            );
+            std::process::exit(1);
+        }
+    };
+    let idx_path = index::index_path(&project_root);
+    if check {
+        let report = match index::check(&project_root) {
+            Ok(r) => r,
+            Err(e) => {
+                eprintln!("error: {e}");
+                std::process::exit(1);
+            }
+        };
+        if report.fresh {
+            println!("index is fresh: {}", idx_path.display());
+            return;
+        }
+        eprintln!("index is stale: {}", idx_path.display());
+        for reason in &report.stale_reasons {
+            eprintln!("  - {}", format_stale_reason(reason));
+        }
+        std::process::exit(1);
+    }
+    if !force && idx_path.exists() {
+        match index::check(&project_root) {
+            Ok(r) if r.fresh => {
+                println!("index is already fresh: {}", idx_path.display());
+                return;
+            }
+            Ok(_) => {}
+            Err(e) => {
+                eprintln!("warning: check failed, rebuilding anyway: {e}");
+            }
+        }
+    }
+    let opts = index::BuildOptions {
+        project_root: project_root.clone(),
+    };
+    let idx = match index::build(&opts) {
+        Ok(i) => i,
+        Err(e) => {
+            eprintln!("error: {e}");
+            std::process::exit(1);
+        }
+    };
+    if let Err(e) = index::write(&idx, &idx_path) {
+        eprintln!("error: {e}");
+        std::process::exit(1);
+    }
+    println!(
+        "wrote {} ({} sources, {} families, {} ontology refs)",
+        idx_path.display(),
+        idx.sources.len(),
+        idx.families.len(),
+        idx.ontology_refs.len(),
+    );
+}
+
+fn format_stale_reason(reason: &index::StaleReason) -> String {
+    use index::StaleReason::*;
+    match reason {
+        IndexMissing => "index missing".to_string(),
+        IndexUnreadable { message } => format!("index unreadable: {message}"),
+        SchemaVersion { found, expected } => {
+            format!("schema_version mismatch: found {found}, expected {expected}")
+        }
+        ConfigChanged => "config_fingerprint changed (.naming.toml or extends)".to_string(),
+        ToolVersion { found, expected } => {
+            format!("tool_version mismatch: found {found}, expected {expected}")
+        }
+        SourceAdded { path } => format!("source added: {path}"),
+        SourceRemoved { path } => format!("source removed: {path}"),
+        SourceModified { path } => format!("source modified: {path}"),
     }
 }
 
