@@ -178,6 +178,17 @@ fn extract_from_file_ast(path: &Path) -> Vec<ExtractedIdentifier> {
         return extract_from_file(path);
     }
     let contextual = treesitter::extract_with_context(path);
+    contextual_to_extracted(contextual)
+}
+
+/// Convert tree-sitter contextual identifiers to the extract surface type.
+#[cfg_attr(
+    not(all(feature = "dyn-grammar", not(target_arch = "wasm32"))),
+    allow(dead_code)
+)]
+fn contextual_to_extracted(
+    contextual: Vec<crate::treesitter::ContextualIdentifier>,
+) -> Vec<ExtractedIdentifier> {
     contextual
         .into_iter()
         .map(|ci| {
@@ -193,6 +204,56 @@ fn extract_from_file_ast(path: &Path) -> Vec<ExtractedIdentifier> {
             }
         })
         .collect()
+}
+
+/// Extract identifiers from `path` using a dynamically loaded grammar.
+///
+/// **Precedence rule:** when the calling site has both a dynamically loaded
+/// grammar and a compile-time `lang-*` grammar for the same extension, the
+/// dynamic grammar wins. See `SPEC.md` § "Dynamic grammar loading".
+#[cfg(all(feature = "dyn-grammar", not(target_arch = "wasm32")))]
+pub fn extract_from_file_with_dyn_grammar(
+    path: &Path,
+    grammar: &crate::treesitter::dyn_loader::LoadedGrammar,
+) -> Vec<ExtractedIdentifier> {
+    let contextual = crate::treesitter::extract_with_dyn_grammar(path, grammar);
+    contextual_to_extracted(contextual)
+}
+
+/// Resolve the file extension `ext` against a list of dynamically loaded
+/// grammars and return the first match (insertion order in `[grammars.languages]`).
+/// Used by callers that want to honor the dyn-grammar precedence rule.
+#[cfg(all(feature = "dyn-grammar", not(target_arch = "wasm32")))]
+pub fn find_dyn_grammar_for_ext<'a>(
+    ext: &str,
+    grammars: &'a [crate::treesitter::dyn_loader::LoadedGrammar],
+) -> Option<&'a crate::treesitter::dyn_loader::LoadedGrammar> {
+    grammars
+        .iter()
+        .find(|g| g.extensions.iter().any(|e| e.eq_ignore_ascii_case(ext)))
+}
+
+/// Emit a one-time stderr notice the first time a dynamic grammar is used in
+/// the current process. Suppressed when `TAGPATH_QUIET=1` is set in the env.
+#[cfg(all(feature = "dyn-grammar", not(target_arch = "wasm32")))]
+pub fn notify_dyn_grammar_used(language: &str, source_path: &Path) {
+    use std::sync::Mutex;
+    use std::sync::OnceLock;
+    static NOTIFIED: OnceLock<Mutex<std::collections::HashSet<String>>> = OnceLock::new();
+    if std::env::var_os("TAGPATH_QUIET").is_some() {
+        return;
+    }
+    let set = NOTIFIED.get_or_init(|| Mutex::new(std::collections::HashSet::new()));
+    let mut guard = match set.lock() {
+        Ok(g) => g,
+        Err(_) => return,
+    };
+    if guard.insert(language.to_string()) {
+        eprintln!(
+            "[tagpath] using dynamic grammar for {language} from {}",
+            source_path.display()
+        );
+    }
 }
 
 /// List source files under a path, applying the same filters as `extract_from_path`.

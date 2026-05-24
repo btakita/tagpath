@@ -340,12 +340,46 @@ console.log(search_over_rows("user", rows));
 See `SPEC.md` § 13 for the exposed surface and the no-filesystem rule for
 `search_over_rows`.
 
+## Advanced: dynamic tree-sitter grammars
+
+Tagpath can load tree-sitter grammars from compiled shared libraries at
+runtime (similar to Helix / nvim-treesitter). The feature is opt-in and
+**native-only** — it is not compiled into the WASM build.
+
+```sh
+cargo install tagpath --features dyn-grammar
+```
+
+Configure under `.naming.toml`:
+
+```toml
+[grammars]
+load_dirs = ["./grammars", "~/.config/tagpath/grammars"]
+
+[grammars.languages.zig]
+path = "./grammars/tree-sitter-zig.so"
+extensions = ["zig"]
+```
+
+Then inspect with:
+
+```sh
+tagpath grammars list    # show configured + discovered grammars
+tagpath grammars check   # exit non-zero if anything fails to load
+```
+
+When a dynamic grammar and a compile-time `lang-*` grammar both claim the
+same extension, the dynamic grammar wins. See `SPEC.md` § 14 for the full
+contract, ABI compatibility rules, and the security note (loading arbitrary
+shared libraries is a code-execution boundary — point `load_dirs` only at
+trusted directories).
+
 ## Roadmap
 
 - **Phase 1** ✅ — Parse, detect conventions, semantic equivalence
 - **Phase 2** ✅ — tree-sitter integration, lint command, extract identifiers, semantic search, composable configs
 - **Phase 3** ✅ — Alias generation, prose conversion, tag co-occurrence graph
-- **Phase 4** ✅ — Index, MCP server, WASM packaging
+- **Phase 4** ✅ — Index, MCP server, WASM packaging, dynamic grammar loading
 
 ## License
 

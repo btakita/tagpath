@@ -140,6 +140,11 @@ enum Commands {
     },
     /// Start the MCP (Model Context Protocol) stdio server
     Mcp,
+    /// Manage runtime-loaded tree-sitter grammars (requires the `dyn-grammar` feature)
+    Grammars {
+        #[command(subcommand)]
+        action: GrammarsAction,
+    },
     /// Build a tag co-occurrence graph from extracted identifiers
     Graph {
         /// Path to scan (file or directory)
@@ -151,6 +156,25 @@ enum Commands {
         /// Filter to subgraph around these tags
         #[arg(short, long)]
         query: Option<String>,
+    },
+}
+
+#[derive(Subcommand)]
+enum GrammarsAction {
+    /// List configured and discovered dynamic tree-sitter grammars
+    List {
+        /// Project path (defaults to current directory)
+        #[arg(default_value = ".")]
+        path: PathBuf,
+        /// Output format (text, json)
+        #[arg(short, long, default_value = "text")]
+        format: String,
+    },
+    /// Verify every configured grammar loads (exits 1 on any failure)
+    Check {
+        /// Project path (defaults to current directory)
+        #[arg(default_value = ".")]
+        path: PathBuf,
     },
 }
 
@@ -192,6 +216,7 @@ fn main() {
             query,
         } => cmd_graph(&path, &format, query.as_deref()),
         Commands::Mcp => cmd_mcp(),
+        Commands::Grammars { action } => cmd_grammars(action),
     }
 }
 
@@ -772,4 +797,217 @@ fn print_family_summaries(families: &[family::TagFamilySummary]) {
             }
         }
     }
+}
+
+// ── Grammars subcommand ─────────────────────────────────────────────
+
+fn cmd_grammars(action: GrammarsAction) {
+    match action {
+        GrammarsAction::List { path, format } => cmd_grammars_list(&path, &format),
+        GrammarsAction::Check { path } => cmd_grammars_check(&path),
+    }
+}
+
+#[cfg(feature = "dyn-grammar")]
+fn cmd_grammars_list(path: &std::path::Path, format: &str) {
+    use tagpath::treesitter::dyn_loader;
+    let (cfg, base_dir) = match load_grammars_config(path) {
+        Ok((Some(c), d)) => (c, d),
+        Ok((None, _)) => {
+            println!("no [grammars] section found in .naming.toml");
+            return;
+        }
+        Err(e) => {
+            eprintln!("error: {e}");
+            std::process::exit(1);
+        }
+    };
+    // Resolve load_dirs (~ expansion + relative resolution).
+    let resolved_dirs: Vec<std::path::PathBuf> = cfg
+        .load_dirs
+        .iter()
+        .map(|d| config::expand_grammar_path(d, &base_dir))
+        .collect();
+    let discovered = dyn_loader::discover(&resolved_dirs);
+    let loaded = dyn_loader::load_configured_all(&cfg, &base_dir);
+    if format == "json" {
+        let mut entries = Vec::new();
+        for (lang, result) in &loaded {
+            let mut obj = serde_json::Map::new();
+            obj.insert(
+                "language".to_string(),
+                serde_json::Value::String(lang.clone()),
+            );
+            obj.insert(
+                "source".to_string(),
+                serde_json::Value::String("configured".to_string()),
+            );
+            match result {
+                Ok(g) => {
+                    obj.insert(
+                        "path".to_string(),
+                        serde_json::Value::String(g.source_path.display().to_string()),
+                    );
+                    obj.insert(
+                        "abi_version".to_string(),
+                        serde_json::Value::Number(serde_json::Number::from(g.abi_version)),
+                    );
+                    obj.insert(
+                        "extensions".to_string(),
+                        serde_json::Value::Array(
+                            g.extensions
+                                .iter()
+                                .map(|e| serde_json::Value::String(e.clone()))
+                                .collect(),
+                        ),
+                    );
+                    obj.insert(
+                        "status".to_string(),
+                        serde_json::Value::String("ok".to_string()),
+                    );
+                }
+                Err(e) => {
+                    obj.insert(
+                        "path".to_string(),
+                        serde_json::Value::String(e.path().display().to_string()),
+                    );
+                    obj.insert(
+                        "status".to_string(),
+                        serde_json::Value::String("error".to_string()),
+                    );
+                    obj.insert(
+                        "error".to_string(),
+                        serde_json::Value::String(e.to_string()),
+                    );
+                }
+            }
+            entries.push(serde_json::Value::Object(obj));
+        }
+        for d in &discovered {
+            let mut obj = serde_json::Map::new();
+            obj.insert(
+                "language".to_string(),
+                serde_json::Value::String(d.language.clone()),
+            );
+            obj.insert(
+                "source".to_string(),
+                serde_json::Value::String("discovered".to_string()),
+            );
+            obj.insert(
+                "path".to_string(),
+                serde_json::Value::String(d.path.display().to_string()),
+            );
+            obj.insert(
+                "symbol".to_string(),
+                serde_json::Value::String(d.symbol.clone()),
+            );
+            entries.push(serde_json::Value::Object(obj));
+        }
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&serde_json::Value::Array(entries)).unwrap()
+        );
+        return;
+    }
+    if loaded.is_empty() && discovered.is_empty() {
+        println!("no grammars configured or discovered");
+        return;
+    }
+    if !loaded.is_empty() {
+        println!("Configured grammars:");
+        for (lang, result) in &loaded {
+            match result {
+                Ok(g) => println!(
+                    "  ok       {lang:<16} abi=v{:<3} ext=[{}] path={}",
+                    g.abi_version,
+                    g.extensions.join(","),
+                    g.source_path.display()
+                ),
+                Err(e) => println!("  error    {lang:<16} {e}"),
+            }
+        }
+    }
+    if !discovered.is_empty() {
+        println!("Discovered grammars:");
+        for d in &discovered {
+            println!(
+                "  found    {:<16} symbol={} path={}",
+                d.language,
+                d.symbol,
+                d.path.display()
+            );
+        }
+    }
+}
+
+#[cfg(feature = "dyn-grammar")]
+fn cmd_grammars_check(path: &std::path::Path) {
+    use tagpath::treesitter::dyn_loader;
+    let (cfg, base_dir) = match load_grammars_config(path) {
+        Ok((Some(c), d)) => (c, d),
+        Ok((None, _)) => {
+            println!("no [grammars] section found in .naming.toml");
+            return;
+        }
+        Err(e) => {
+            eprintln!("error: {e}");
+            std::process::exit(1);
+        }
+    };
+    let results = dyn_loader::load_configured_all(&cfg, &base_dir);
+    let mut failed = 0usize;
+    let mut succeeded = 0usize;
+    for (lang, result) in &results {
+        match result {
+            Ok(g) => {
+                println!(
+                    "ok       {lang:<16} abi=v{} path={}",
+                    g.abi_version,
+                    g.source_path.display()
+                );
+                succeeded += 1;
+            }
+            Err(e) => {
+                eprintln!("error    {lang:<16} {e}");
+                failed += 1;
+            }
+        }
+    }
+    eprintln!("\n{succeeded} ok, {failed} failed");
+    if failed > 0 {
+        std::process::exit(1);
+    }
+}
+
+/// Locate `.naming.toml` from `path` and return `(grammars_config, base_dir)`.
+#[cfg(feature = "dyn-grammar")]
+fn load_grammars_config(
+    path: &std::path::Path,
+) -> Result<(Option<config::GrammarsConfig>, std::path::PathBuf), String> {
+    let config_path = lint::find_config(path).ok_or_else(|| {
+        format!(
+            "no .naming.toml found (searched from {} upward); run `tagpath init` to create one",
+            path.display()
+        )
+    })?;
+    let resolved = config::resolve(&config_path)?;
+    let base_dir = config_path
+        .parent()
+        .ok_or_else(|| "config path has no parent directory".to_string())?
+        .to_path_buf();
+    Ok((resolved.grammars, base_dir))
+}
+
+#[cfg(not(feature = "dyn-grammar"))]
+fn cmd_grammars_list(_path: &std::path::Path, _format: &str) {
+    eprintln!("error: tagpath was built without the `dyn-grammar` feature");
+    eprintln!("hint: rebuild with `cargo install --features dyn-grammar tagpath`");
+    std::process::exit(1);
+}
+
+#[cfg(not(feature = "dyn-grammar"))]
+fn cmd_grammars_check(_path: &std::path::Path) {
+    eprintln!("error: tagpath was built without the `dyn-grammar` feature");
+    eprintln!("hint: rebuild with `cargo install --features dyn-grammar tagpath`");
+    std::process::exit(1);
 }

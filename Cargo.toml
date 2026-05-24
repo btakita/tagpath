@@ -1,6 +1,6 @@
 [package]
 name = "tagpath"
-version = "0.9.0"
+version = "0.10.0"
 edition = "2024"
 description = "Tag Path — parse, lint, and search tag-based identifiers across languages"
 license = "MIT"
@@ -34,6 +34,9 @@ lang-php = ["treesitter", "dep:tree-sitter-php"]
 lang-csharp = ["treesitter", "dep:tree-sitter-c-sharp"]
 lang-swift = ["treesitter", "dep:tree-sitter-swift"]
 lang-kotlin = ["treesitter", "dep:tree-sitter-kotlin-ng"]
+# Runtime tree-sitter grammar loading from `.so` / `.dylib` / `.dll` files (native only).
+# Opt-in; not part of `default`. WASM builds must NOT enable this feature.
+dyn-grammar = ["treesitter", "dep:libloading", "dep:tree-sitter-language", "dep:dirs"]
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }
@@ -61,3 +64,6 @@ sha2 = "0.10"
 wasm-bindgen = { version = "0.2", optional = true }
 serde-wasm-bindgen = { version = "0.6", optional = true }
 js-sys = { version = "0.3", optional = true }
+libloading = { version = "0.8", optional = true }
+tree-sitter-language = { version = "0.1", optional = true }
+dirs = { version = "5", optional = true }

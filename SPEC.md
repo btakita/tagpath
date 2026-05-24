@@ -445,3 +445,108 @@ wasm-pack build --target nodejs --no-default-features --features wasm
 
 The `[lib] crate-type = ["cdylib", "rlib"]` setting is required so `wasm-pack`
 can emit a cdylib alongside the regular rlib used by native consumers.
+
+## 14. Dynamic grammar loading
+
+Tagpath can load tree-sitter grammars from compiled shared libraries
+(`.so` / `.dylib` / `.dll`) at runtime, modelled after the Helix and Neovim
+approaches. This lives behind an opt-in feature flag and is **native-only** —
+the loader and its config surface are unavailable on WASM.
+
+### 14.1 Feature flag
+
+```sh
+cargo install tagpath --features dyn-grammar
+# or, for a dev build:
+cargo build --features dyn-grammar
+```
+
+`dyn-grammar` is **not** part of the default feature set. It coexists with the
+compile-time `lang-*` features: each is independently enable-able, and the
+dynamic loader wins on collisions (see Precedence).
+
+### 14.2 Config surface
+
+```toml
+# .naming.toml
+[grammars]
+# Directories scanned for compiled tree-sitter grammars.
+# Relative paths resolve against the .naming.toml directory;
+# a leading `~/` expands to the user's home directory.
+load_dirs = ["./grammars", "~/.config/tagpath/grammars"]
+
+# Pin specific grammars by language key.
+[grammars.languages.zig]
+path = "./grammars/tree-sitter-zig.so"
+# `symbol` defaults to `tree_sitter_{lang}` — set it only if your grammar
+# uses a non-standard entrypoint name.
+symbol = "tree_sitter_zig"
+extensions = ["zig"]
+```
+
+When tagpath is built **without** `dyn-grammar`, the `[grammars]` section
+deserializes successfully but is ignored at runtime — configs stay portable
+across builds.
+
+### 14.3 Precedence
+
+When a file's extension is handled by both a compile-time `lang-*` grammar
+and a configured dynamic grammar, the **dynamic grammar wins**. This lets
+users override a bundled grammar with a freshly compiled local copy without
+rebuilding tagpath.
+
+When multiple dynamic grammars claim the same extension, the first match in
+`[grammars.languages]` ordering wins (BTreeMap iteration → lexicographic by
+language key).
+
+### 14.4 ABI compatibility
+
+Every loaded grammar must report an ABI version inside the
+`MIN_COMPATIBLE_LANGUAGE_VERSION..=LANGUAGE_VERSION` range exposed by the
+linked `tree-sitter` runtime. ABI mismatches surface as
+`LoadError::AbiMismatch { path, actual, expected_min, expected_max }`. Fix
+by rebuilding the grammar against a tree-sitter CLI within the supported
+range, then re-running `tagpath grammars check`.
+
+### 14.5 Error envelopes
+
+The loader returns one of the following variants on failure; CLI commands
+render them with the offending path and a remediation hint:
+
+| Variant | Trigger | Hint surfaced |
+|---|---|---|
+| `MissingFile` | `path` does not exist | Check the `path` value under `[grammars.languages.*]` |
+| `DlOpen` | `dlopen` / equivalent fails | Verify the file is a real shared library for this platform |
+| `MissingSymbol` | `dlsym` of the entry symbol fails | Set `symbol = "..."` if the grammar uses a non-default entrypoint |
+| `AbiMismatch` | grammar ABI outside supported range | Rebuild the grammar against a compatible tree-sitter CLI |
+
+### 14.6 CLI
+
+```sh
+tagpath grammars list      # show configured + discovered grammars (with status)
+tagpath grammars list --format json
+tagpath grammars check     # exit 0 if every configured grammar loads; exit 1 otherwise
+```
+
+When tagpath is built **without** `dyn-grammar`, both subcommands remain
+visible in `--help` and exit with a clear "built without --features
+dyn-grammar" hint so users can detect a misconfigured install quickly.
+
+The first time a dynamic grammar is used in a process, tagpath emits a
+single stderr notice:
+
+```
+[tagpath] using dynamic grammar for zig from ./grammars/tree-sitter-zig.so
+```
+
+Set `TAGPATH_QUIET=1` to suppress this notice.
+
+### 14.7 Security note
+
+`dlopen`-loading an arbitrary shared library is **executing arbitrary native
+code in the tagpath process**. Only point `load_dirs` and
+`[grammars.languages.*].path` at directories you control or trust. The
+loader does no signature checking and cannot — by design — distinguish a
+real tree-sitter grammar from a malicious cdylib with a matching symbol
+name. This is the same trust model as Helix's `runtime/grammars/` and
+Neovim's `nvim-treesitter` install directory.

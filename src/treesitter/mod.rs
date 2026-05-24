@@ -4,6 +4,9 @@ use std::path::Path;
 #[cfg(feature = "treesitter")]
 use tree_sitter::Parser;
 
+#[cfg(all(feature = "dyn-grammar", not(target_arch = "wasm32")))]
+pub mod dyn_loader;
+
 /// The AST context in which an identifier appears
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -260,6 +263,90 @@ pub fn extract_with_context(path: &Path) -> Vec<ContextualIdentifier> {
 #[cfg(not(feature = "treesitter"))]
 pub fn extract_with_context(_path: &Path) -> Vec<ContextualIdentifier> {
     vec![]
+}
+
+// ── Dynamic-grammar extraction ───────────────────────────────────────
+
+/// Extract identifiers using a dynamically loaded tree-sitter grammar.
+///
+/// Unlike the compile-time `extract_with_context`, this walker does not have
+/// per-language classifier knowledge — every identifier-bearing node is
+/// reported as [`IdentifierContext::Other`]. The trade-off is universal
+/// language coverage at the cost of role classification.
+///
+/// Reads the file at `path`, parses it with `grammar.language_fn`, and
+/// returns one [`ContextualIdentifier`] per identifier-shaped leaf node.
+#[cfg(all(feature = "dyn-grammar", not(target_arch = "wasm32")))]
+pub fn extract_with_dyn_grammar(
+    path: &Path,
+    grammar: &dyn_loader::LoadedGrammar,
+) -> Vec<ContextualIdentifier> {
+    let content = match std::fs::read_to_string(path) {
+        Ok(c) => c,
+        Err(_) => return vec![],
+    };
+    let mut parser = Parser::new();
+    if parser.set_language(&grammar.language_fn).is_err() {
+        return vec![];
+    }
+    let tree = match parser.parse(&content, None) {
+        Some(t) => t,
+        None => return vec![],
+    };
+    let source = content.as_bytes();
+    let mut results = Vec::new();
+    let mut cursor = tree.walk();
+    let mut did_visit_children = false;
+    loop {
+        if !did_visit_children {
+            let node = cursor.node();
+            if node.is_named() && is_identifier_kind(node.kind()) {
+                let start = node.start_position();
+                if let Ok(text) = node.utf8_text(source)
+                    && !text.is_empty()
+                    && text.len() <= 256
+                {
+                    results.push(ContextualIdentifier {
+                        file: path.to_path_buf(),
+                        line: start.row + 1,
+                        column: start.column + 1,
+                        identifier: text.to_string(),
+                        context: IdentifierContext::Other,
+                        language: grammar.language.clone(),
+                    });
+                }
+            }
+            if cursor.goto_first_child() {
+                did_visit_children = false;
+                continue;
+            }
+        }
+        if cursor.goto_next_sibling() {
+            did_visit_children = false;
+        } else if cursor.goto_parent() {
+            did_visit_children = true;
+        } else {
+            break;
+        }
+    }
+    results
+}
+
+/// True if a tree-sitter node kind looks like an identifier-bearing leaf.
+/// Used by the dynamic-grammar walker, which has no per-language classifier.
+#[cfg(all(feature = "dyn-grammar", not(target_arch = "wasm32")))]
+fn is_identifier_kind(kind: &str) -> bool {
+    matches!(
+        kind,
+        "identifier"
+            | "type_identifier"
+            | "field_identifier"
+            | "property_identifier"
+            | "shorthand_property_identifier"
+            | "constant"
+            | "scoped_identifier"
+            | "simple_identifier"
+    )
 }
 
 // ── Node classification dispatch ─────────────────────────────────────

@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::path::Path;
+use std::collections::{BTreeMap, HashMap};
+use std::path::{Path, PathBuf};
 
 /// Top-level .naming.toml configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -27,6 +27,79 @@ pub struct NamingConfig {
     pub contexts: Option<HashMap<String, ContextConfig>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tags: Option<TagConfig>,
+    /// Optional dynamic-grammar loader configuration. Only consumed when
+    /// the binary is built with `--features dyn-grammar`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub grammars: Option<GrammarsConfig>,
+}
+
+/// Configuration for runtime tree-sitter grammar loading.
+///
+/// Lives under `[grammars]` in `.naming.toml`. Only consumed when the
+/// binary is built with `--features dyn-grammar`; otherwise the section is
+/// deserialized but ignored.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct GrammarsConfig {
+    /// Directories to scan for compiled tree-sitter grammars
+    /// (`*.so` on Linux, `*.dylib` on macOS, `*.dll` on Windows).
+    /// Relative paths resolve against the directory containing `.naming.toml`.
+    /// A leading `~` is expanded to the user's home directory.
+    #[serde(default)]
+    pub load_dirs: Vec<PathBuf>,
+    /// Per-language overrides — pin a specific shared library and entry symbol
+    /// to a logical language key.
+    #[serde(default)]
+    pub languages: BTreeMap<String, GrammarEntry>,
+}
+
+/// Per-language entry under `[grammars.languages.<name>]`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GrammarEntry {
+    /// Path to the shared library. Relative paths resolve against the
+    /// `.naming.toml` directory; `~` expands to the user's home directory.
+    pub path: PathBuf,
+    /// Entry symbol; defaults to `tree_sitter_{lang}` where `{lang}` is the
+    /// language key.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub symbol: Option<String>,
+    /// File extensions this grammar should be matched against
+    /// (without the leading dot).
+    #[serde(default)]
+    pub extensions: Vec<String>,
+}
+
+/// Expand a leading `~` to the user's home directory, then resolve relative
+/// paths against `base_dir`. Absolute paths and `~`-rooted paths are returned
+/// as-is after `~` expansion.
+pub fn expand_grammar_path(raw: &Path, base_dir: &Path) -> PathBuf {
+    let raw_str = raw.to_string_lossy();
+    let expanded: PathBuf = if let Some(rest) = raw_str.strip_prefix("~/") {
+        match home_dir() {
+            Some(home) => home.join(rest),
+            None => raw.to_path_buf(),
+        }
+    } else if raw_str == "~" {
+        home_dir().unwrap_or_else(|| raw.to_path_buf())
+    } else {
+        raw.to_path_buf()
+    };
+    if expanded.is_absolute() {
+        expanded
+    } else {
+        base_dir.join(expanded)
+    }
+}
+
+#[cfg(feature = "dyn-grammar")]
+fn home_dir() -> Option<PathBuf> {
+    dirs::home_dir()
+}
+
+#[cfg(not(feature = "dyn-grammar"))]
+fn home_dir() -> Option<PathBuf> {
+    // Fallback `$HOME` lookup so path expansion is testable without the
+    // optional `dirs` dependency.
+    std::env::var_os("HOME").map(PathBuf::from)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -215,6 +288,7 @@ fn empty_config() -> NamingConfig {
         packages: None,
         contexts: None,
         tags: None,
+        grammars: None,
     }
 }
 
@@ -261,6 +335,22 @@ fn merge_into(target: &mut NamingConfig, source: &NamingConfig) {
                 }
             }
             None => target.tags = source.tags.clone(),
+        }
+    }
+    if let Some(ref src_grammars) = source.grammars {
+        match target.grammars {
+            Some(ref mut tgt_grammars) => {
+                // Append load_dirs (de-duplicating preserves insertion order: child wins).
+                for dir in &src_grammars.load_dirs {
+                    if !tgt_grammars.load_dirs.contains(dir) {
+                        tgt_grammars.load_dirs.push(dir.clone());
+                    }
+                }
+                for (k, v) in &src_grammars.languages {
+                    tgt_grammars.languages.insert(k.clone(), v.clone());
+                }
+            }
+            None => target.grammars = source.grammars.clone(),
         }
     }
 }

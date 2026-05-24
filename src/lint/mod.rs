@@ -121,6 +121,7 @@ mod tests {
             packages: None,
             contexts: Some(ctx_map),
             tags: None,
+            grammars: None,
         }
     }
 
