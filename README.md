@@ -374,12 +374,31 @@ contract, ABI compatibility rules, and the security note (loading arbitrary
 shared libraries is a code-execution boundary — point `load_dirs` only at
 trusted directories).
 
+## Consumer integration
+
+External tools (tsift, agent-doc, custom pipelines) can consume the
+`.naming/index.json` snapshot as a symbol-graph adapter:
+
+- Every family carries a content-addressable `handle` (`fam:<hex>`) that
+  is stable across reindexing and unaffected by member churn.
+- Every member carries a `handle` (`mem:<hex>`) that is stable across
+  in-file line moves but breaks on rename.
+- `tagpath index --schema-version` prints the integer schema version for
+  feature detection.
+- `tagpath index --emit jsonl` streams the same data as NDJSON for
+  pipeline consumers (header / sources / families / members / footer).
+- `tagpath index --check --emit jsonl` streams structured stale reasons.
+
+See SPEC.md §15 for the full wire contract, freshness model, and
+recommended consumer pattern.
+
 ## Roadmap
 
 - **Phase 1** ✅ — Parse, detect conventions, semantic equivalence
 - **Phase 2** ✅ — tree-sitter integration, lint command, extract identifiers, semantic search, composable configs
 - **Phase 3** ✅ — Alias generation, prose conversion, tag co-occurrence graph
 - **Phase 4** ✅ — Index, MCP server, WASM packaging, dynamic grammar loading
+- **Phase 5** ✅ — Stable family handles, NDJSON emit, consumer contract (SPEC §15)
 
 ## License
 

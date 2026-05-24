@@ -49,7 +49,7 @@ fn build_produces_non_empty_snapshot() {
     write_source(&root, "src/bar.py", "def create_user(name):\n    pass\n");
 
     let idx = build_at(&root);
-    assert_eq!(idx.schema_version, 1);
+    assert_eq!(idx.schema_version, 2);
     assert!(!idx.sources.is_empty(), "sources should not be empty");
     assert!(!idx.families.is_empty(), "families should not be empty");
     assert!(idx.config_fingerprint.starts_with("sha256:"));

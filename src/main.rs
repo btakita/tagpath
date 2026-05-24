@@ -81,6 +81,13 @@ enum Commands {
         /// Rebuild even if the on-disk index is still fresh
         #[arg(long)]
         force: bool,
+        /// Output transport: `json` (default, writes .naming/index.json) or
+        /// `jsonl` (stream NDJSON to stdout; no on-disk write).
+        #[arg(long, default_value = "json")]
+        emit: String,
+        /// Print the integer schema version and exit 0. No other output.
+        #[arg(long)]
+        schema_version: bool,
     },
     /// Generate aliases for an identifier in all naming conventions
     Alias {
@@ -195,7 +202,13 @@ fn main() {
             format,
             index,
         } => cmd_search(&query, &path, &format, index),
-        Commands::Index { path, check, force } => cmd_index(&path, check, force),
+        Commands::Index {
+            path,
+            check,
+            force,
+            emit,
+            schema_version,
+        } => cmd_index(&path, check, force, &emit, schema_version),
         Commands::Alias {
             name,
             convention,
@@ -686,7 +699,19 @@ fn cmd_search_index(query: &str, path: &std::path::Path, format: &str) {
     }
 }
 
-fn cmd_index(path: &std::path::Path, check: bool, force: bool) {
+fn cmd_index(path: &std::path::Path, check: bool, force: bool, emit: &str, schema_version: bool) {
+    if schema_version {
+        println!("{}", index::SCHEMA_VERSION);
+        return;
+    }
+    let emit_jsonl = match emit {
+        "json" => false,
+        "jsonl" => true,
+        other => {
+            eprintln!("error: unknown --emit value `{other}` (expected `json` or `jsonl`)");
+            std::process::exit(2);
+        }
+    };
     let project_root = match index::find_project_root(path) {
         Some(root) => root,
         None => {
@@ -706,6 +731,18 @@ fn cmd_index(path: &std::path::Path, check: bool, force: bool) {
                 std::process::exit(1);
             }
         };
+        if emit_jsonl {
+            let stdout = std::io::stdout();
+            let mut out = stdout.lock();
+            if let Err(e) = index::emit_jsonl_stale(&project_root, &report, &mut out) {
+                eprintln!("error: {e}");
+                std::process::exit(1);
+            }
+            if !report.fresh {
+                std::process::exit(1);
+            }
+            return;
+        }
         if report.fresh {
             println!("index is fresh: {}", idx_path.display());
             return;
@@ -716,7 +753,7 @@ fn cmd_index(path: &std::path::Path, check: bool, force: bool) {
         }
         std::process::exit(1);
     }
-    if !force && idx_path.exists() {
+    if !force && !emit_jsonl && idx_path.exists() {
         match index::check(&project_root) {
             Ok(r) if r.fresh => {
                 println!("index is already fresh: {}", idx_path.display());
@@ -738,6 +775,15 @@ fn cmd_index(path: &std::path::Path, check: bool, force: bool) {
             std::process::exit(1);
         }
     };
+    if emit_jsonl {
+        let stdout = std::io::stdout();
+        let mut out = stdout.lock();
+        if let Err(e) = index::emit_jsonl(&idx, &mut out) {
+            eprintln!("error: {e}");
+            std::process::exit(1);
+        }
+        return;
+    }
     if let Err(e) = index::write(&idx, &idx_path) {
         eprintln!("error: {e}");
         std::process::exit(1);
@@ -758,6 +804,11 @@ fn format_stale_reason(reason: &index::StaleReason) -> String {
         IndexUnreadable { message } => format!("index unreadable: {message}"),
         SchemaVersion { found, expected } => {
             format!("schema_version mismatch: found {found}, expected {expected}")
+        }
+        SchemaChanged { found, expected } => {
+            format!(
+                "schema_version migration: found {found}, expected {expected} (rebuild silently)"
+            )
         }
         ConfigChanged => "config_fingerprint changed (.naming.toml or extends)".to_string(),
         ToolVersion { found, expected } => {

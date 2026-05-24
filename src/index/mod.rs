@@ -8,13 +8,17 @@
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::{config, extract, lint, ontology, parser};
 
 /// Current on-disk schema version.
-pub const SCHEMA_VERSION: u32 = 1;
+///
+/// Bumped to `2` in tagpath 0.11.0 when stable `handle` fields were added to
+/// `Family` and `FamilyMember`. See `SPEC.md` §15 for the wire contract.
+pub const SCHEMA_VERSION: u32 = 2;
 
 /// Default index file location, relative to the project root.
 pub const INDEX_RELATIVE_PATH: &str = ".naming/index.json";
@@ -41,16 +45,32 @@ pub struct Source {
 }
 
 /// Grouped tag family with members.
+///
+/// `handle` is a content-addressable identifier of the form
+/// `fam:<sha256[0..16]>` derived from the canonical project root + sorted
+/// tags + sorted ontology refs for this family. It does NOT depend on
+/// source paths or member lines, so adding a member or moving a definition
+/// inside a file does not change the handle. Renaming/retagging breaks the
+/// handle on purpose. See `SPEC.md` §15.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Family {
+    pub handle: String,
     pub family_id: String,
     pub tags: Vec<String>,
     pub members: Vec<FamilyMember>,
 }
 
 /// One identifier occurrence under a family.
+///
+/// `handle` is a content-addressable identifier of the form
+/// `mem:<sha256[0..16]>` derived from the parent family handle + member
+/// name + path-relative-to-project-root. Line numbers are intentionally
+/// excluded so insertions above a symbol do not rot citations. Renames
+/// break this on purpose. See `SPEC.md` §15.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct FamilyMember {
+    pub handle: String,
+    pub family_handle: String,
     pub name: String,
     pub convention: String,
     pub path: String,
@@ -85,13 +105,34 @@ pub struct CheckReport {
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum StaleReason {
     IndexMissing,
-    IndexUnreadable { message: String },
-    SchemaVersion { found: u32, expected: u32 },
+    IndexUnreadable {
+        message: String,
+    },
+    SchemaVersion {
+        found: u32,
+        expected: u32,
+    },
+    /// On-disk index uses an older schema. Treated like `SchemaVersion`
+    /// but signals that the rebuild is a silent migration, not a real
+    /// mismatch — consumers should rebuild without surfacing an error.
+    SchemaChanged {
+        found: u32,
+        expected: u32,
+    },
     ConfigChanged,
-    ToolVersion { found: String, expected: String },
-    SourceAdded { path: String },
-    SourceRemoved { path: String },
-    SourceModified { path: String },
+    ToolVersion {
+        found: String,
+        expected: String,
+    },
+    SourceAdded {
+        path: String,
+    },
+    SourceRemoved {
+        path: String,
+    },
+    SourceModified {
+        path: String,
+    },
 }
 
 /// Locate the project root: walk up from `start` until a `.naming.toml` is found.
@@ -150,11 +191,14 @@ pub fn build(opts: &BuildOptions) -> Result<Index, String> {
         let entry = family_map
             .entry(canonical.clone())
             .or_insert_with(|| Family {
+                handle: String::new(),
                 family_id: canonical.clone(),
                 tags: occ.parsed.tags.clone(),
                 members: Vec::new(),
             });
         entry.members.push(FamilyMember {
+            handle: String::new(),
+            family_handle: String::new(),
             name: occ.identifier,
             convention: occ.parsed.convention.to_string(),
             path: relative_to(&occ.file, project_root),
@@ -175,6 +219,8 @@ pub fn build(opts: &BuildOptions) -> Result<Index, String> {
     families.sort_by(|a, b| a.family_id.cmp(&b.family_id));
 
     let ontology_refs = load_ontology_refs(project_root)?;
+    let project_root_canonical = canonical_project_root(project_root);
+    assign_handles(&mut families, &project_root_canonical, &ontology_refs);
 
     Ok(Index {
         schema_version: SCHEMA_VERSION,
@@ -233,10 +279,20 @@ pub fn check(project_root: &Path) -> Result<CheckReport, String> {
     };
     let mut reasons = Vec::new();
     if existing.schema_version != SCHEMA_VERSION {
-        reasons.push(StaleReason::SchemaVersion {
-            found: existing.schema_version,
-            expected: SCHEMA_VERSION,
-        });
+        // Older on-disk schema is a silent migration trigger, not an
+        // error. Future schema versions higher than ours still produce
+        // a hard `SchemaVersion` mismatch (we cannot upgrade upward).
+        if existing.schema_version < SCHEMA_VERSION {
+            reasons.push(StaleReason::SchemaChanged {
+                found: existing.schema_version,
+                expected: SCHEMA_VERSION,
+            });
+        } else {
+            reasons.push(StaleReason::SchemaVersion {
+                found: existing.schema_version,
+                expected: SCHEMA_VERSION,
+            });
+        }
     }
     let tool = env!("CARGO_PKG_VERSION");
     if existing.tool_version != tool {
@@ -364,6 +420,203 @@ fn sha256_hex(bytes: &[u8]) -> String {
 fn relative_to(path: &Path, root: &Path) -> String {
     let stripped = path.strip_prefix(root).unwrap_or(path);
     stripped.to_string_lossy().replace('\\', "/")
+}
+
+/// Canonicalize the project root path for handle derivation.
+///
+/// Falls back to the lexical path if canonicalization fails (e.g. the
+/// directory was just removed). Always uses forward slashes so handles
+/// stay portable across operating systems.
+fn canonical_project_root(project_root: &Path) -> String {
+    let resolved = project_root
+        .canonicalize()
+        .unwrap_or_else(|_| project_root.to_path_buf());
+    resolved.to_string_lossy().replace('\\', "/")
+}
+
+/// Compute the stable family handle from the canonical project root,
+/// sorted family tags, and the ontology refs that match those tags.
+///
+/// Inputs are intentionally limited to family identity. Member paths and
+/// line numbers are excluded so adding a definition (or moving one inside
+/// a file) does not rot the handle.
+pub fn family_handle(
+    project_root_canonical: &str,
+    tags: &[String],
+    ontology_refs: &[OntologyRef],
+) -> String {
+    let mut sorted_tags: Vec<&str> = tags.iter().map(String::as_str).collect();
+    sorted_tags.sort_unstable();
+    let tag_set: BTreeSet<&str> = sorted_tags.iter().copied().collect();
+    let mut matching_refs: Vec<&str> = ontology_refs
+        .iter()
+        .filter(|r| tag_set.contains(r.tag.as_str()))
+        .map(|r| r.tag.as_str())
+        .collect();
+    matching_refs.sort_unstable();
+    matching_refs.dedup();
+    let payload = format!(
+        "{project_root_canonical}\n{}\n{}",
+        sorted_tags.join(","),
+        matching_refs.join(","),
+    );
+    let hex = sha256_hex(payload.as_bytes());
+    format!("fam:{}", &hex[..16])
+}
+
+/// Compute the stable member handle from the parent family handle, the
+/// member name, and the path relative to the project root. Line numbers
+/// are intentionally excluded.
+pub fn member_handle(family_handle: &str, name: &str, path: &str) -> String {
+    let payload = format!("{family_handle}\n{name}\n{path}");
+    let hex = sha256_hex(payload.as_bytes());
+    format!("mem:{}", &hex[..16])
+}
+
+fn assign_handles(
+    families: &mut [Family],
+    project_root_canonical: &str,
+    ontology_refs: &[OntologyRef],
+) {
+    for fam in families.iter_mut() {
+        let h = family_handle(project_root_canonical, &fam.tags, ontology_refs);
+        fam.handle = h.clone();
+        for member in &mut fam.members {
+            let mh = member_handle(&h, &member.name, &member.path);
+            member.handle = mh;
+            member.family_handle = h.clone();
+        }
+    }
+}
+
+/// Options for [`emit_jsonl`].
+#[derive(Debug, Clone, Default)]
+pub struct EmitJsonlOptions {
+    /// When true, emit `{"type":"stale", ...}` records derived from a check
+    /// report instead of header/source/family/member/footer records.
+    pub check_mode: bool,
+}
+
+/// Stream an `Index` as NDJSON to `out`. One JSON object per line, in this
+/// order: `header`, `source`*, `family`*, `member`*, `footer`. The footer's
+/// counts must match the number of records emitted. The on-disk JSON shape
+/// is unchanged — JSONL is purely an output transport for streaming
+/// consumers (tsift, ad-hoc CLI pipelines).
+pub fn emit_jsonl<W: Write>(idx: &Index, out: &mut W) -> Result<(), String> {
+    let header = serde_json::json!({
+        "type": "header",
+        "schema_version": idx.schema_version,
+        "tool_version": idx.tool_version,
+        "config_fingerprint": idx.config_fingerprint,
+        "generated_at": idx.generated_at,
+    });
+    writeln_json(out, &header)?;
+
+    let mut source_count = 0usize;
+    for src in &idx.sources {
+        let rec = serde_json::json!({
+            "type": "source",
+            "path": src.path,
+            "hash": src.hash,
+            "mtime": src.mtime,
+            "size": src.size,
+        });
+        writeln_json(out, &rec)?;
+        source_count += 1;
+    }
+
+    let mut family_count = 0usize;
+    let mut member_count = 0usize;
+    // Emit all families first, then all members. Tsift wants stable
+    // ordering: families form the citation table, members the rows.
+    for fam in &idx.families {
+        let ontology_refs_for_family: Vec<&str> = idx
+            .ontology_refs
+            .iter()
+            .filter(|r| fam.tags.iter().any(|t| t == &r.tag))
+            .map(|r| r.tag.as_str())
+            .collect();
+        let rec = serde_json::json!({
+            "type": "family",
+            "handle": fam.handle,
+            "family_id": fam.family_id,
+            "tags": fam.tags,
+            "ontology_refs": ontology_refs_for_family,
+        });
+        writeln_json(out, &rec)?;
+        family_count += 1;
+    }
+    for fam in &idx.families {
+        for m in &fam.members {
+            let rec = serde_json::json!({
+                "type": "member",
+                "handle": m.handle,
+                "family_handle": m.family_handle,
+                "name": m.name,
+                "convention": m.convention,
+                "path": m.path,
+                "line": m.line,
+            });
+            writeln_json(out, &rec)?;
+            member_count += 1;
+        }
+    }
+
+    let footer = serde_json::json!({
+        "type": "footer",
+        "counts": {
+            "sources": source_count,
+            "families": family_count,
+            "members": member_count,
+            "ontology_refs": idx.ontology_refs.len(),
+        },
+    });
+    writeln_json(out, &footer)?;
+    Ok(())
+}
+
+/// Stream a stale report as NDJSON to `out`. One `{"type":"stale", ...}`
+/// record per reason, plus a single `header` line carrying schema/tool
+/// metadata derived from the on-disk index when available.
+pub fn emit_jsonl_stale<W: Write>(
+    project_root: &Path,
+    report: &CheckReport,
+    out: &mut W,
+) -> Result<(), String> {
+    // Best-effort header: report the active schema and tool versions.
+    let header = serde_json::json!({
+        "type": "header",
+        "schema_version": SCHEMA_VERSION,
+        "tool_version": env!("CARGO_PKG_VERSION"),
+        "fresh": report.fresh,
+        "index_path": report.index_path.display().to_string(),
+        "project_root": project_root.display().to_string(),
+    });
+    writeln_json(out, &header)?;
+    for reason in &report.stale_reasons {
+        let rec = serde_json::json!({
+            "type": "stale",
+            "reason": reason,
+        });
+        writeln_json(out, &rec)?;
+    }
+    let footer = serde_json::json!({
+        "type": "footer",
+        "counts": {
+            "stale_reasons": report.stale_reasons.len(),
+        },
+    });
+    writeln_json(out, &footer)?;
+    Ok(())
+}
+
+fn writeln_json<W: Write>(out: &mut W, value: &serde_json::Value) -> Result<(), String> {
+    let line = serde_json::to_string(value).map_err(|e| format!("serialize jsonl record: {e}"))?;
+    out.write_all(line.as_bytes())
+        .map_err(|e| format!("write jsonl: {e}"))?;
+    out.write_all(b"\n")
+        .map_err(|e| format!("write jsonl newline: {e}"))?;
+    Ok(())
 }
 
 fn load_ontology_refs(project_root: &Path) -> Result<Vec<OntologyRef>, String> {

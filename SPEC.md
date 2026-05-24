@@ -168,7 +168,7 @@ tagpath prose <NAME> [--format text|json]
 tagpath normalize-query <QUERY> [--format text|json]
 tagpath ontology [<PATH>] [--format text|json]
 tagpath graph [<PATH>] [--format text|dot|json] [--query <QUERY>]
-tagpath index [<PATH>] [--check] [--force]
+tagpath index [<PATH>] [--check] [--force] [--emit json|jsonl] [--schema-version]
 tagpath search <QUERY> <PATH> [--index]
 ```
 
@@ -550,3 +550,168 @@ loader does no signature checking and cannot — by design — distinguish a
 real tree-sitter grammar from a malicious cdylib with a matching symbol
 name. This is the same trust model as Helix's `runtime/grammars/` and
 Neovim's `nvim-treesitter` install directory.
+
+## 15. Consumer contract (tsift / agent-doc / external)
+
+`tagpath index` is meant to be consumed as a symbol-graph adapter by
+external tools — primarily `tsift` (hybrid BM25 + vector search) but the
+same contract serves any downstream that wants stable family handles.
+This section is the wire and semantic contract those consumers can
+target.
+
+### 15.1 Schema version
+
+The index payload carries an integer `schema_version`. Current value: `2`.
+Bump rules:
+
+- Backward-compatible field additions (new optional fields on `Family`,
+  `FamilyMember`, etc.) bump `schema_version`. Older permissive readers
+  keep working; strict readers must rebuild.
+- Field renames, semantic changes to existing fields, or removals are
+  major changes and also bump `schema_version`.
+
+Consumers can feature-detect cheaply via:
+
+```
+tagpath index --schema-version
+```
+
+This command prints the integer (no trailing prose) and exits 0.
+Consumers should treat `schema_version` < their minimum supported value
+as "tagpath too old" and `schema_version` > their maximum as "tagpath
+too new" and ask the user to align versions.
+
+`tagpath index --check` against an older on-disk schema returns the
+`schema_changed` stale reason (not the harder `schema_version`
+mismatch). Tagpath treats this as a silent migration trigger and
+rebuilds without surfacing an error. A `schema_version` *higher* than
+the running tagpath stays as the hard `schema_version` mismatch — we
+cannot upgrade upward.
+
+### 15.2 Stable handles
+
+Every `Family` carries a content-addressable `handle` of the form
+`fam:<sha256[0..16]>`. Derivation:
+
+```
+sha256(
+  project_root_canonical_path  + "\n" +
+  sorted(tags).join(",")        + "\n" +
+  sorted(ontology_tags_used_by_family).join(",")
+).hex()[0..16]
+```
+
+`project_root_canonical_path` is the canonicalized absolute path of the
+project root (the directory containing `.naming.toml`), with backslashes
+replaced by forward slashes so handles stay portable across operating
+systems. If canonicalization fails (e.g. the directory was just removed),
+tagpath falls back to the lexical path it was given.
+
+`sorted(ontology_tags_used_by_family)` is the list of ontology tags
+(from `.naming/tags/*.md`) that match any tag in this family, sorted
+ascending. If a project has no ontology, this becomes the empty string.
+
+Critically, this derivation does **not** include source paths, member
+counts, or member lines. Adding a new member to an existing family does
+not change the family handle, so tsift's citations survive ordinary
+edits.
+
+Every `FamilyMember` carries a content-addressable `handle` of the form
+`mem:<sha256[0..16]>`. Derivation:
+
+```
+sha256(
+  family_handle + "\n" +
+  member_name   + "\n" +
+  path_relative_to_project_root
+).hex()[0..16]
+```
+
+Line numbers are intentionally excluded — moving a definition inside a
+file does not break the member handle. Renames and file moves *do*
+break the handle on purpose: the symbol's identity changed.
+
+Both fields also carry `family_handle` on each `FamilyMember` so
+consumers can join member rows back to families without a separate
+lookup.
+
+### 15.3 Freshness contract
+
+`tagpath index --check` reports freshness against the on-disk
+`.naming/index.json`. The exit code is `0` for fresh, non-zero for
+stale. The structured stale reasons are:
+
+| Reason | Meaning |
+|---|---|
+| `index_missing` | No on-disk index yet — first build. |
+| `index_unreadable` | Index file present but cannot be parsed. |
+| `schema_version` | On-disk schema does not match and we cannot migrate (e.g. on-disk is newer than us). |
+| `schema_changed` | On-disk schema is older than the current `SCHEMA_VERSION`. Silent rebuild; not an error. |
+| `tool_version` | Compiled tagpath version changed since the index was written. |
+| `config_changed` | `.naming.toml` or its `extends` chain fingerprint changed. |
+| `source_added` / `source_removed` / `source_modified` | Per-file delta against the on-disk source set. |
+
+Recommended consumer pattern:
+
+1. On boot, run `tagpath index --schema-version` once and refuse to
+   start if the version is outside the supported range.
+2. Before each query, run `tagpath index --check`. If non-zero, run
+   `tagpath index` (or `tagpath index --emit jsonl` to stream) to
+   refresh.
+3. Read `.naming/index.json` (or consume NDJSON) and use the family
+   handles as citation keys in your own envelopes.
+
+### 15.4 NDJSON wire format (`--emit jsonl`)
+
+`tagpath index --emit jsonl` streams NDJSON to stdout instead of writing
+`.naming/index.json`. Same data, different framing — useful for pipeline
+consumers that don't want to round-trip through disk.
+
+Record order is stable:
+
+1. Exactly one `header` line, first.
+2. Zero or more `source` lines.
+3. Zero or more `family` lines.
+4. Zero or more `member` lines.
+5. Exactly one `footer` line, last.
+
+Each line is a single JSON object terminated by `\n`. No blank lines.
+Record shapes:
+
+```json
+{"type":"header","schema_version":2,"tool_version":"0.11.0","config_fingerprint":"sha256:...","generated_at":"2026-05-24T22:00:00Z"}
+{"type":"source","path":"src/foo.rs","hash":"sha256:...","mtime":1700000000,"size":42}
+{"type":"family","handle":"fam:abcdef0123456789","family_id":"create_user","tags":["create","user"],"ontology_refs":["user"]}
+{"type":"member","handle":"mem:0123456789abcdef","family_handle":"fam:abcdef0123456789","name":"create_user","convention":"snake_case","path":"src/foo.rs","line":1}
+{"type":"footer","counts":{"sources":1,"families":1,"members":1,"ontology_refs":0}}
+```
+
+`footer.counts` must equal the count of records of each type actually
+emitted, so consumers can detect truncation.
+
+`--emit jsonl` can combine with `--check`. In check mode the stream is:
+
+1. A `header` line carrying `schema_version`, `tool_version`,
+   `index_path`, `project_root`, and a `fresh` flag.
+2. Zero or more `stale` lines, each `{"type":"stale","reason":{...}}`
+   carrying the structured stale-reason variant.
+3. A `footer` with `counts.stale_reasons`.
+
+In check mode, no `.naming/index.json` is written and tagpath exits
+non-zero when `fresh: false` — matching the text-mode behavior.
+
+`--emit jsonl --force` rebuilds and streams. The default `--emit json`
+preserves the prior on-disk behavior verbatim.
+
+### 15.5 Recommended consumer pattern (tsift et al.)
+
+- Poll `tagpath index --check` before each batch of work. On stale,
+  rebuild with `tagpath index --emit jsonl` and stream into your
+  consumer pipeline in one pass.
+- Cite families by `handle` (not `family_id`), and members by `handle`
+  (not `path:line`). These survive ordinary edits.
+- Treat handle changes as deliberate signals: a renamed handle means
+  the underlying symbol identity changed.
+- When the on-disk schema is older than what your consumer compiled
+  against, treat `schema_changed` as a silent rebuild trigger; only
+  surface `schema_version` as a hard error.
