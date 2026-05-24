@@ -106,6 +106,35 @@ tagpath search "user" . --index        # query the persisted index instead of re
 # Initialize a .naming.toml
 tagpath init --lang typescript
 tagpath init --preset immutable-tag
+
+# Run as an MCP (Model Context Protocol) stdio server for coding agents
+tagpath mcp
+```
+
+### MCP server
+
+`tagpath mcp` speaks line-delimited JSON-RPC 2.0 on stdio. It exposes six tools — `parse`, `normalize_query`, `lint`, `search`, `ontology_lookup`, and `indexed_project_query` — that wrap the corresponding library entrypoints. See [SPEC.md §10](SPEC.md) for the full wire format.
+
+Smoke test:
+
+```bash
+printf '%s\n%s\n' \
+  '{"jsonrpc":"2.0","id":1,"method":"initialize"}' \
+  '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' \
+  | tagpath mcp
+```
+
+Wire it into a Claude Desktop MCP config (`~/Library/Application Support/Claude/claude_desktop_config.json` on macOS, or the equivalent path on your platform):
+
+```json
+{
+  "mcpServers": {
+    "tagpath": {
+      "command": "tagpath",
+      "args": ["mcp"]
+    }
+  }
+}
 ```
 
 ## Features

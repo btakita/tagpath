@@ -1,6 +1,6 @@
 [package]
 name = "tagpath"
-version = "0.7.0"
+version = "0.8.0"
 edition = "2024"
 description = "Tag Path — parse, lint, and search tag-based identifiers across languages"
 license = "MIT"
@@ -9,7 +9,8 @@ keywords = ["naming", "convention", "identifier", "parser", "lint"]
 categories = ["command-line-utilities", "development-tools"]
 
 [features]
-default = ["lang-rust", "lang-python", "lang-javascript", "lang-typescript", "lang-go", "lang-c", "lang-cpp", "lang-java", "lang-ruby", "lang-php", "lang-csharp", "lang-swift", "lang-kotlin"]
+default = ["lang-rust", "lang-python", "lang-javascript", "lang-typescript", "lang-go", "lang-c", "lang-cpp", "lang-java", "lang-ruby", "lang-php", "lang-csharp", "lang-swift", "lang-kotlin", "mcp"]
+mcp = []
 treesitter = ["dep:tree-sitter"]
 lang-rust = ["treesitter", "dep:tree-sitter-rust"]
 lang-python = ["treesitter", "dep:tree-sitter-python"]

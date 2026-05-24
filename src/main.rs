@@ -138,6 +138,8 @@ enum Commands {
         #[arg(short, long, default_value = "text")]
         format: String,
     },
+    /// Start the MCP (Model Context Protocol) stdio server
+    Mcp,
     /// Build a tag co-occurrence graph from extracted identifiers
     Graph {
         /// Path to scan (file or directory)
@@ -189,7 +191,23 @@ fn main() {
             format,
             query,
         } => cmd_graph(&path, &format, query.as_deref()),
+        Commands::Mcp => cmd_mcp(),
     }
+}
+
+#[cfg(feature = "mcp")]
+fn cmd_mcp() {
+    if let Err(error) = tagpath::mcp::run() {
+        eprintln!("error: mcp server: {error}");
+        std::process::exit(1);
+    }
+}
+
+#[cfg(not(feature = "mcp"))]
+fn cmd_mcp() {
+    eprintln!("error: tagpath was built without the `mcp` feature");
+    eprintln!("hint: rebuild with `cargo build --features mcp` or use a release that includes it");
+    std::process::exit(1);
 }
 
 fn cmd_parse(name: &str, convention: Option<&str>, format: &str) {

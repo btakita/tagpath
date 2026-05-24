@@ -6,6 +6,8 @@ pub mod family;
 pub mod graph;
 pub mod index;
 pub mod lint;
+#[cfg(feature = "mcp")]
+pub mod mcp;
 pub mod ontology;
 pub mod parser;
 pub mod prose;
