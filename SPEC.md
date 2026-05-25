@@ -375,6 +375,46 @@ $ printf '%s\n%s\n' \
 
 Disable with `--no-default-features --features lang-rust,...` to build without `mcp`. A binary built without `mcp` still accepts the `mcp` subcommand but exits with a "built without the `mcp` feature" error so callers fail closed.
 
+### 10.6 Installer
+
+`tagpath mcp install` generates ready-to-paste MCP server config blocks for the five major harnesses Claude Desktop, Claude Code, Codex, OpenCode, and Cursor. The installer never starts the server — it only emits or writes config text.
+
+The bare `tagpath mcp` invocation (no subcommand) still starts the stdio server; `tagpath mcp serve` is an explicit alias. `tagpath mcp install ...` is the installer entrypoint.
+
+#### 10.6.1 Subcommands
+
+| Flag | Behavior |
+|------|---------|
+| `--list` | Print known harness names and their default config-file paths on the current platform. |
+| `--print <harness>` | Emit the harness config block to stdout. No file writes. Safe default — pipe to `pbcopy` / `xclip` / `>` a file. |
+| `--apply <harness>` | Merge the `tagpath` entry into the harness's config file. Without `--yes`, prints the resolved path + preview as a dry-run; with `--yes`, performs an atomic write. |
+| `--uninstall <harness>` | Remove the `tagpath` entry from the harness config. Idempotent; honors `--yes` like `--apply`. |
+| `--binary <path>` | Override the `command` field (default `"tagpath"` — resolved via PATH). |
+| `--project <path>` | Write to `<path>/.claude/settings.json` or `<path>/.cursor/mcp.json` instead of the user-level config. Only Claude Code and Cursor honor this; other harnesses return an error when `--project` is paired with them. |
+| `--config-dir-override <dir>` | Replace the resolved home/config base directory. Primarily for tests; advanced users with non-standard config layouts can use it too. |
+
+#### 10.6.2 Harness matrix
+
+| Harness | Format | Default user path | Config key |
+|---------|--------|-------------------|------------|
+| `claude-desktop` | JSON | macOS `~/Library/Application Support/Claude/claude_desktop_config.json`, Windows `%APPDATA%\Claude\claude_desktop_config.json`, Linux `~/.config/Claude/claude_desktop_config.json` | `mcpServers.tagpath` |
+| `claude-code` | JSON | `~/.claude/settings.json` (or `<project>/.claude/settings.json` with `--project`) | `mcpServers.tagpath` |
+| `codex` | TOML | `~/.codex/config.toml` | `[mcp_servers.tagpath]` |
+| `opencode` | JSON | `~/.config/opencode/config.json` (XDG_CONFIG_HOME-aware) | `mcp.tagpath` (with `"type": "local"`) |
+| `cursor` | JSON | `~/.cursor/mcp.json` (or `<project>/.cursor/mcp.json` with `--project`) | `mcpServers.tagpath` |
+
+Path resolution uses the `dirs` crate, which honors `XDG_CONFIG_HOME` on Linux, `%APPDATA%` on Windows, and `~/Library/Application Support` on macOS.
+
+#### 10.6.3 Merge semantics
+
+The installer ONLY touches the `tagpath` entry under each harness's canonical map (`mcpServers.tagpath`, `mcp.tagpath`, or `mcp_servers.tagpath`). All other keys — unrelated MCP servers, top-level fields like `telemetry`, `model`, `version` — are preserved verbatim. Re-running `--apply --yes` is idempotent: the output file is byte-equivalent on the second call.
+
+Writes are atomic via `<path>.tmp` then `rename(2)`, mirroring the index writer in `src/index/mod.rs`.
+
+#### 10.6.4 Security note
+
+`--apply --yes` modifies a file in the user's home directory. The default `--print` workflow is the audit-friendly path: the user sees the exact JSON/TOML block before pasting it. `--apply` without `--yes` is a dry-run that prints the resolved path + the merged preview without writing. Tests and CI should always pair `--apply` with `--config-dir-override` to avoid touching real config.
+
 ## 11. Tsift Token-Savings Benchmark Fixture
 
 The repo includes `fixtures/tsift-token-savings.json`, a downstream-facing fixture for measuring how compact tagpath family/alias previews are compared with raw symbol previews in tsift workflows.

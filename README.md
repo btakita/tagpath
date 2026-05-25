@@ -129,7 +129,17 @@ printf '%s\n%s\n' \
   | tagpath mcp
 ```
 
-Wire it into a Claude Desktop MCP config (`~/Library/Application Support/Claude/claude_desktop_config.json` on macOS, or the equivalent path on your platform):
+Generate a ready-to-paste config block for any of the five supported harnesses (Claude Desktop, Claude Code, Codex, OpenCode, Cursor):
+
+```bash
+tagpath mcp install --list                       # show known harnesses + paths
+tagpath mcp install --print claude-code          # print JSON for Claude Code
+tagpath mcp install --apply codex --yes          # merge into ~/.codex/config.toml
+```
+
+`--apply` without `--yes` is a dry-run that prints the resolved path and merged preview. `--uninstall <harness> --yes` removes the `tagpath` entry. See [SPEC.md §10.6](SPEC.md#106-installer) for the full harness matrix.
+
+For Claude Desktop specifically (`~/Library/Application Support/Claude/claude_desktop_config.json` on macOS, `~/.config/Claude/claude_desktop_config.json` on Linux, `%APPDATA%\Claude\claude_desktop_config.json` on Windows), the block is:
 
 ```json
 {

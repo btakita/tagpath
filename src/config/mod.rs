@@ -90,15 +90,15 @@ pub fn expand_grammar_path(raw: &Path, base_dir: &Path) -> PathBuf {
     }
 }
 
-#[cfg(feature = "dyn-grammar")]
+#[cfg(not(target_arch = "wasm32"))]
 fn home_dir() -> Option<PathBuf> {
     dirs::home_dir()
 }
 
-#[cfg(not(feature = "dyn-grammar"))]
+#[cfg(target_arch = "wasm32")]
 fn home_dir() -> Option<PathBuf> {
-    // Fallback `$HOME` lookup so path expansion is testable without the
-    // optional `dirs` dependency.
+    // wasm builds have no home directory; fall back to $HOME env var if set
+    // (browser builds will just get None and skip ~ expansion).
     std::env::var_os("HOME").map(PathBuf::from)
 }
 

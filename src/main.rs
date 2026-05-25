@@ -166,8 +166,15 @@ enum Commands {
         #[arg(short, long, default_value = "text")]
         format: String,
     },
-    /// Start the MCP (Model Context Protocol) stdio server
-    Mcp,
+    /// Start the MCP (Model Context Protocol) stdio server, or run an
+    /// installer/uninstaller for a known harness config file.
+    ///
+    /// `tagpath mcp` (no subcommand) starts the stdio server.
+    /// `tagpath mcp install ...` generates / writes / removes harness configs.
+    Mcp {
+        #[command(subcommand)]
+        action: Option<McpAction>,
+    },
     /// Manage runtime-loaded tree-sitter grammars (requires the `dyn-grammar` feature)
     Grammars {
         #[command(subcommand)]
@@ -200,6 +207,42 @@ enum Commands {
         #[arg(short, long)]
         query: Option<String>,
     },
+}
+
+#[derive(Subcommand)]
+enum McpAction {
+    /// Start the stdio JSON-RPC server (default when `tagpath mcp` is run with no subcommand).
+    Serve,
+    /// Generate or apply MCP server config blocks for known harnesses.
+    Install(McpInstallArgs),
+}
+
+#[derive(clap::Args)]
+struct McpInstallArgs {
+    /// Print the harness config to stdout (no file writes).
+    #[arg(long, value_name = "HARNESS", group = "install_mode")]
+    print: Option<String>,
+    /// Apply the harness config (writes file with --yes; otherwise dry-run).
+    #[arg(long, value_name = "HARNESS", group = "install_mode")]
+    apply: Option<String>,
+    /// Remove the `tagpath` entry from a harness config.
+    #[arg(long, value_name = "HARNESS", group = "install_mode")]
+    uninstall: Option<String>,
+    /// List known harnesses and their default config paths.
+    #[arg(long, group = "install_mode")]
+    list: bool,
+    /// Override the resolved `command` binary path (default: "tagpath").
+    #[arg(long, value_name = "PATH")]
+    binary: Option<String>,
+    /// Write to <project>/.claude or <project>/.cursor instead of the user-level config.
+    #[arg(long, value_name = "PATH")]
+    project: Option<PathBuf>,
+    /// Override the resolved config base directory (tests + advanced).
+    #[arg(long, value_name = "DIR")]
+    config_dir_override: Option<PathBuf>,
+    /// Confirm a write for --apply / --uninstall. Without --yes, those are dry-runs.
+    #[arg(long)]
+    yes: bool,
 }
 
 #[derive(Subcommand)]
@@ -280,7 +323,7 @@ fn main() {
             format,
             query,
         } => cmd_graph(&path, &format, query.as_deref()),
-        Commands::Mcp => cmd_mcp(),
+        Commands::Mcp { action } => cmd_mcp_dispatch(action),
         Commands::Grammars { action } => cmd_grammars(action),
         Commands::Watch {
             path,
@@ -331,6 +374,13 @@ fn cmd_watch(_path: &std::path::Path, _once: bool, _no_lint: bool, _emit_shape: 
     std::process::exit(1);
 }
 
+fn cmd_mcp_dispatch(action: Option<McpAction>) {
+    match action {
+        None | Some(McpAction::Serve) => cmd_mcp(),
+        Some(McpAction::Install(args)) => cmd_mcp_install(args),
+    }
+}
+
 #[cfg(feature = "mcp")]
 fn cmd_mcp() {
     if let Err(error) = tagpath::mcp::run() {
@@ -343,6 +393,119 @@ fn cmd_mcp() {
 fn cmd_mcp() {
     eprintln!("error: tagpath was built without the `mcp` feature");
     eprintln!("hint: rebuild with `cargo build --features mcp` or use a release that includes it");
+    std::process::exit(1);
+}
+
+#[cfg(feature = "mcp")]
+fn cmd_mcp_install(args: McpInstallArgs) {
+    use tagpath::mcp::install::{
+        self, InstallOpts, InstallScope, apply_config, list_default_paths, render_config,
+        uninstall_config,
+    };
+
+    let scope = if args.project.is_some() {
+        InstallScope::Project
+    } else {
+        InstallScope::User
+    };
+    let opts = InstallOpts {
+        binary: args.binary.unwrap_or_else(|| "tagpath".to_string()),
+        scope,
+        project_path: args.project.clone(),
+        config_dir_override: args.config_dir_override.clone(),
+    };
+
+    if args.list {
+        let entries = list_default_paths(&opts);
+        for (name, path) in entries {
+            match path {
+                Some(p) => println!("{name}\t{}", p.display()),
+                None => println!("{name}\t(no default on this platform/scope)"),
+            }
+        }
+        return;
+    }
+
+    if let Some(harness) = args.print.as_deref() {
+        match render_config(harness, &opts) {
+            Ok(text) => {
+                if !text.ends_with('\n') {
+                    println!("{text}");
+                } else {
+                    print!("{text}");
+                }
+            }
+            Err(e) => {
+                eprintln!("error: {e}");
+                std::process::exit(1);
+            }
+        }
+        return;
+    }
+
+    if let Some(harness) = args.apply.as_deref() {
+        let dry = !args.yes;
+        match apply_config(harness, &opts, dry) {
+            Ok(outcome) => {
+                if dry {
+                    eprintln!("dry-run: would write {}", outcome.path.display());
+                    eprintln!("(pass --yes to apply)");
+                    print!("{}", outcome.preview);
+                } else {
+                    eprintln!("wrote {}", outcome.path.display());
+                }
+            }
+            Err(e) => {
+                eprintln!("error: {e}");
+                std::process::exit(1);
+            }
+        }
+        return;
+    }
+
+    if let Some(harness) = args.uninstall.as_deref() {
+        let dry = !args.yes;
+        match uninstall_config(harness, &opts, dry) {
+            Ok(outcome) => {
+                if !outcome.preview.is_empty() && !outcome.written {
+                    if dry {
+                        eprintln!("dry-run: would update {}", outcome.path.display());
+                        eprintln!("(pass --yes to apply)");
+                        print!("{}", outcome.preview);
+                    } else {
+                        eprintln!(
+                            "no tagpath entry found in {}; nothing to do",
+                            outcome.path.display()
+                        );
+                    }
+                } else if outcome.written {
+                    eprintln!("removed tagpath entry from {}", outcome.path.display());
+                } else {
+                    eprintln!(
+                        "no tagpath entry found in {}; nothing to do",
+                        outcome.path.display()
+                    );
+                }
+            }
+            Err(e) => {
+                eprintln!("error: {e}");
+                std::process::exit(1);
+            }
+        }
+        return;
+    }
+
+    // No mode flag set — print usage hint.
+    let _ = install::HARNESSES; // ensure the symbol is referenced
+    eprintln!("error: tagpath mcp install requires one of --print, --apply, --uninstall, --list");
+    eprintln!("hint: try `tagpath mcp install --list` to see known harnesses");
+    std::process::exit(2);
+}
+
+#[cfg(not(feature = "mcp"))]
+fn cmd_mcp_install(_args: McpInstallArgs) {
+    eprintln!("error: tagpath was built without the `mcp` feature");
+    eprintln!("hint: rebuild with `cargo build --features mcp`");
     std::process::exit(1);
 }
 

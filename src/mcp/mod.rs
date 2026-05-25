@@ -14,6 +14,7 @@ use std::path::{Path, PathBuf};
 
 use crate::{config, extract, index, lint, ontology, parser, query, search};
 
+pub mod install;
 mod tools;
 
 /// MCP protocol version this server speaks.
