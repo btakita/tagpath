@@ -1,9 +1,10 @@
 [package]
 name = "tagpath"
-version = "0.17.0"
+version = "0.17.1"
 edition = "2024"
 description = "Tag Path — parse, lint, and search tag-based identifiers across languages"
 license = "MIT"
+license-file = "LICENSE-MIT"
 repository = "https://github.com/btakita/tagpath"
 keywords = ["naming", "convention", "identifier", "parser", "lint"]
 categories = ["command-line-utilities", "development-tools"]
