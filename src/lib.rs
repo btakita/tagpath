@@ -13,6 +13,8 @@ pub mod lint;
 #[cfg(all(feature = "mcp", not(target_arch = "wasm32")))]
 pub mod mcp;
 #[cfg(not(target_arch = "wasm32"))]
+pub mod meta_index;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod ontology;
 pub mod parser;
 pub mod prose;

@@ -108,6 +108,7 @@ tagpath index --force                  # rebuild even when fresh
 tagpath index --update                 # incremental update — re-extract only files that changed
 tagpath search "user" . --index        # query the persisted index instead of rescanning
 tagpath rename create_user update_user # rewrite the indexed family across conventions
+tagpath meta-index .                   # aggregate sibling .naming/index.json files
 
 # Initialize a .naming.toml
 tagpath init --lang typescript
@@ -176,6 +177,7 @@ For Claude Desktop specifically (`~/Library/Application Support/Claude/claude_de
 - **Tag ontology** — load `.naming/tags/*.md` domain tags and validate them against `.naming.toml`
 - **Tag graph** — co-occurrence graph of tag relationships across a codebase (petgraph, DOT/JSON output)
 - **Persistent index** — `tagpath index` snapshots sources, families, ontology refs, and a config fingerprint to `.naming/index.json` for cheap freshness checks (`--check`) and fast indexed search (`search --index`)
+- **Workspace meta-index** — `tagpath meta-index <workspace-root>` aggregates sibling `.naming/index.json` files into `.naming/meta-index.json` with workspace-scoped handles for cross-repo lookup.
 - **Live watcher** — `tagpath watch` emits NDJSON filesystem events on stdout (`hello`, `index_update`, `lint_finding`, `shutdown`) so tsift, agent-doc editor surfaces, and ad-hoc shell pipelines can react in real time without polling. See [SPEC.md §17](SPEC.md) for the wire format.
 
 ```bash

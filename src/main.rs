@@ -4,8 +4,8 @@ use std::{
     path::PathBuf,
 };
 use tagpath::{
-    alias, compression, config, extract, family, graph, index, lint, ontology, parser, prose,
-    query, rename as rename_mod, search,
+    alias, compression, config, extract, family, graph, index, lint, meta_index, ontology, parser,
+    prose, query, rename as rename_mod, search,
 };
 
 #[derive(Parser)]
@@ -125,6 +125,18 @@ enum Commands {
         /// summary format. Ignored when `--update` is not set.
         #[arg(long)]
         force_full: bool,
+    },
+    /// Aggregate per-project indexes into a workspace registry
+    MetaIndex {
+        /// Workspace root to scan (defaults to current directory)
+        #[arg(default_value = ".")]
+        workspace_root: PathBuf,
+        /// Output path (defaults to <workspace-root>/.naming/meta-index.json)
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+        /// Output format (text, json)
+        #[arg(short, long, default_value = "text")]
+        format: String,
     },
     /// Generate aliases for an identifier in all naming conventions
     Alias {
@@ -327,6 +339,11 @@ fn main() {
             update,
             force_full,
         ),
+        Commands::MetaIndex {
+            workspace_root,
+            output,
+            format,
+        } => cmd_meta_index(&workspace_root, output.as_deref(), &format),
         Commands::Alias {
             name,
             convention,
@@ -1379,6 +1396,47 @@ fn cmd_index_update(
             );
         } else {
             eprintln!("{}", index::format_update_digest(&result.summary));
+        }
+    }
+}
+
+fn cmd_meta_index(
+    workspace_root: &std::path::Path,
+    output: Option<&std::path::Path>,
+    format: &str,
+) {
+    let opts = meta_index::MetaIndexOptions {
+        workspace_root: workspace_root.to_path_buf(),
+        output_path: output.map(std::path::Path::to_path_buf),
+    };
+    let meta = match meta_index::build_meta_index(&opts) {
+        Ok(meta) => meta,
+        Err(e) => {
+            eprintln!("error: {e}");
+            std::process::exit(1);
+        }
+    };
+    let output_path = opts
+        .output_path
+        .unwrap_or_else(|| meta_index::meta_index_path(workspace_root));
+    if let Err(e) = meta_index::write(&meta, &output_path) {
+        eprintln!("error: {e}");
+        std::process::exit(1);
+    }
+
+    match format {
+        "json" => println!("{}", serde_json::to_string_pretty(&meta).unwrap()),
+        "text" => {
+            println!(
+                "wrote {} ({} project indexes, {} families)",
+                output_path.display(),
+                meta.indexes.len(),
+                meta.families.len()
+            );
+        }
+        other => {
+            eprintln!("error: unknown --format value `{other}` (expected `text` or `json`)");
+            std::process::exit(2);
         }
     }
 }

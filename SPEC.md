@@ -174,6 +174,7 @@ tagpath graph [<PATH>] [--format text|dot|json] [--query <QUERY>]
 tagpath index [<PATH>] [--check] [--force] [--emit json|jsonl] [--schema-version]
 tagpath search <QUERY> <PATH> [--index]
 tagpath rename <OLD> <NEW> [<PATH>] [--dry-run] [--format text|json]
+tagpath meta-index [<WORKSPACE_ROOT>] [--output <PATH>] [--format text|json]
 ```
 
 ### 9.1 parse
@@ -340,6 +341,18 @@ When `--index` is passed, `tagpath search` reads `.naming/index.json` instead of
 - After a successful non-dry-run rename, Tagpath rebuilds `.naming/index.json` and its sidecar so subsequent indexed queries see the new family.
 - `--dry-run` prints the same text or JSON report without writing source files or index artifacts.
 - `--format json` emits `{ project_root, old, new, old_family_id, new_family_id, dry_run, files_changed, replacements, edits }`, where each edit records `{ path, old, new, replacements }`.
+
+### 9.16 meta-index
+
+`tagpath meta-index <WORKSPACE_ROOT>` aggregates existing per-project `.naming/index.json` files under a workspace into a top-level `.naming/meta-index.json` registry. It does not rebuild child indexes; run `tagpath index` inside each project first.
+
+- `<WORKSPACE_ROOT>` defaults to `.`. The scan follows normal directories but skips build/cache/vendor directories such as `.git`, `.agent-doc`, `.tsift`, `target`, `node_modules`, `.venv`, and `vendor`.
+- The output schema is JSON with stable key order: `schema_version`, `generated_at`, `tool_version`, `workspace_root`, `indexes`, and `families`. `schema_version` is `1`.
+- `indexes` records each contributing project with workspace-relative `project_root`, workspace-relative `index_path`, child `schema_version`, child `tool_version`, `source_count`, and `family_count`.
+- `families` flattens every child index family. Each entry keeps the child `project_family_handle`, `family_id`, `tags`, workspace-relative `project_root`, and a workspace-scoped `handle` of the form `meta:fam:<hash>`.
+- Family members keep the child `project_member_handle`, `name`, `convention`, workspace-relative `path`, `line`, and a workspace-scoped `handle` of the form `meta:mem:<hash>`.
+- `--output <PATH>` writes somewhere other than `<workspace-root>/.naming/meta-index.json`.
+- `--format text` (default) prints a write summary. `--format json` prints the full generated payload after writing it.
 
 ## 10. MCP Server
 
