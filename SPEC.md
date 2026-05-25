@@ -776,6 +776,11 @@ preserves the prior on-disk behavior verbatim.
   against, treat `schema_changed` as a silent rebuild trigger; only
   surface `schema_version` as a hard error.
 
+**Reference consumer:** tsift adopted this contract in 0.1.47. See
+[`src/tsift/SPEC.md` § Tagpath integration](../tsift/SPEC.md#tagpath-integration)
+for the implementation: auto-detect, `--no-tagpath` opt-out, `--tagpath-strict`
+fail-closed mode, and the `tagpath_handle` field on `SymbolHit`.
+
 ### 15.6 Sidecar cache (`.naming/index.bincache`)
 
 Tagpath writes an auxiliary binary file `.naming/index.bincache`
