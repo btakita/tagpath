@@ -118,7 +118,7 @@ tagpath mcp
 
 ### MCP server
 
-`tagpath mcp` speaks line-delimited JSON-RPC 2.0 on stdio. It exposes six tools — `parse`, `normalize_query`, `lint`, `search`, `ontology_lookup`, and `indexed_project_query` — that wrap the corresponding library entrypoints. See [SPEC.md §10](SPEC.md) for the full wire format.
+`tagpath mcp` speaks line-delimited JSON-RPC 2.0 on stdio. It exposes nine tools — `parse`, `normalize_query`, `lint`, `search`, `ontology_lookup`, `indexed_project_query`, `family_by_path`, `lint_session_doc`, and `index_handle` — that wrap the corresponding library entrypoints. See [SPEC.md §10](SPEC.md) for the full wire format.
 
 Smoke test:
 

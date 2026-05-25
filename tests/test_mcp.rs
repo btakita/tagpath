@@ -90,13 +90,13 @@ fn initialize_returns_expected_protocol_version() {
 }
 
 #[test]
-fn tools_list_returns_all_six_tools_with_schemas() {
+fn tools_list_returns_all_nine_tools_with_schemas() {
     let responses = run_mcp(&[r#"{"jsonrpc":"2.0","id":1,"method":"tools/list"}"#]);
     assert_eq!(responses.len(), 1);
     let tools = responses[0]["result"]["tools"]
         .as_array()
         .expect("tools array");
-    assert_eq!(tools.len(), 6, "expected 6 tools, got {}", tools.len());
+    assert_eq!(tools.len(), 9, "expected 9 tools, got {}", tools.len());
     let expected = [
         "parse",
         "normalize_query",
@@ -104,6 +104,9 @@ fn tools_list_returns_all_six_tools_with_schemas() {
         "search",
         "ontology_lookup",
         "indexed_project_query",
+        "family_by_path",
+        "lint_session_doc",
+        "index_handle",
     ];
     for tool in tools {
         let name = tool["name"].as_str().unwrap();
@@ -200,4 +203,242 @@ fn unknown_method_returns_method_not_found() {
 fn malformed_json_returns_parse_error() {
     let responses = run_mcp(&["not json"]);
     assert_eq!(responses[0]["error"]["code"], -32700);
+}
+
+// ---------- Phase 5: convention helpers (p5mcs) ----------
+
+#[test]
+fn family_by_path_returns_matching_family_for_known_source() {
+    let root = make_project("family_by_path_known");
+    write_naming_toml(&root);
+    write_source(
+        &root,
+        "src/foo.rs",
+        "fn create_user() {}\nfn delete_user() {}\n",
+    );
+
+    let abs_src = root.canonicalize().unwrap().join("src/foo.rs");
+    let req = format!(
+        r#"{{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{{"name":"family_by_path","arguments":{{"path":"{}"}}}}}}"#,
+        abs_src.display()
+    );
+    let responses = run_mcp(&[req.as_str()]);
+    assert_eq!(
+        responses[0]["result"]["isError"], false,
+        "unexpected error: {:?}",
+        responses[0]["result"]["content"][0]["text"]
+    );
+    let payload: Value = serde_json::from_str(
+        responses[0]["result"]["content"][0]["text"]
+            .as_str()
+            .unwrap(),
+    )
+    .unwrap();
+    let families = payload["families"].as_array().unwrap();
+    assert!(
+        !families.is_empty(),
+        "expected at least one family for src/foo.rs"
+    );
+    let first = &families[0];
+    assert!(
+        first["family_handle"]
+            .as_str()
+            .is_some_and(|s| s.starts_with("fam:"))
+    );
+    let members = first["members"].as_array().unwrap();
+    assert!(!members.is_empty());
+    assert!(
+        members[0]["member_handle"]
+            .as_str()
+            .is_some_and(|s| s.starts_with("mem:")),
+        "expected mem: handle on member"
+    );
+
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn family_by_path_returns_diagnostic_for_unknown_path() {
+    let root = make_project("family_by_path_unknown");
+    write_naming_toml(&root);
+    write_source(&root, "src/foo.rs", "fn create_user() {}\n");
+
+    // Build index first via indexed_project_query to make sure it exists.
+    let prime = format!(
+        r#"{{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{{"name":"indexed_project_query","arguments":{{"path":"{}"}}}}}}"#,
+        root.display()
+    );
+    let bogus = root.join("does/not/exist.rs");
+    let req = format!(
+        r#"{{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{{"name":"family_by_path","arguments":{{"path":"{}","project_root":"{}"}}}}}}"#,
+        bogus.display(),
+        root.display()
+    );
+    let responses = run_mcp(&[prime.as_str(), req.as_str()]);
+    // The second response is the family_by_path call.
+    let r = &responses[1];
+    assert_eq!(
+        r["result"]["isError"], false,
+        "should not be error envelope"
+    );
+    let payload: Value =
+        serde_json::from_str(r["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
+    assert_eq!(payload["diagnostic"], "path_not_in_index");
+    assert!(payload["families"].as_array().unwrap().is_empty());
+
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn lint_session_doc_reports_malformed_findings() {
+    let root = make_project("lint_session_malformed");
+    let doc_path = root.join("session.md");
+    // Missing `=` in agent:done attribute is a classic malformed-attr case.
+    std::fs::write(
+        &doc_path,
+        "# Session\n\n<!-- agent:exchange -->\n<!-- /agent:exchange -->\n\n<!-- agent:done archive PATH -->\n<!-- /agent:done -->\n",
+    )
+    .unwrap();
+
+    let req = format!(
+        r#"{{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{{"name":"lint_session_doc","arguments":{{"path":"{}"}}}}}}"#,
+        doc_path.display()
+    );
+    let responses = run_mcp(&[req.as_str()]);
+    assert_eq!(responses[0]["result"]["isError"], false);
+    let payload: Value = serde_json::from_str(
+        responses[0]["result"]["content"][0]["text"]
+            .as_str()
+            .unwrap(),
+    )
+    .unwrap();
+    let findings = payload["findings"].as_array().unwrap();
+    assert!(
+        findings
+            .iter()
+            .any(|f| f["rule"].as_str() == Some("agent-doc/malformed-attr")),
+        "expected agent-doc/malformed-attr finding, got {:?}",
+        findings
+    );
+    assert_eq!(payload["exit_code"], 1);
+
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn lint_session_doc_clean_doc_yields_empty_findings() {
+    let root = make_project("lint_session_clean");
+    let doc_path = root.join("clean.md");
+    std::fs::write(
+        &doc_path,
+        "# Session\n\n<!-- agent:exchange -->\n<!-- /agent:exchange -->\n",
+    )
+    .unwrap();
+    let req = format!(
+        r#"{{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{{"name":"lint_session_doc","arguments":{{"path":"{}"}}}}}}"#,
+        doc_path.display()
+    );
+    let responses = run_mcp(&[req.as_str()]);
+    assert_eq!(responses[0]["result"]["isError"], false);
+    let payload: Value = serde_json::from_str(
+        responses[0]["result"]["content"][0]["text"]
+            .as_str()
+            .unwrap(),
+    )
+    .unwrap();
+    assert!(payload["findings"].as_array().unwrap().is_empty());
+    assert_eq!(payload["exit_code"], 0);
+
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn index_handle_resolves_known_family_handle() {
+    let root = make_project("index_handle_known_fam");
+    write_naming_toml(&root);
+    write_source(&root, "src/foo.rs", "fn create_user() {}\n");
+
+    // Build the index first.
+    let prime = format!(
+        r#"{{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{{"name":"indexed_project_query","arguments":{{"path":"{}"}}}}}}"#,
+        root.display()
+    );
+    let prime_resp = run_mcp(&[prime.as_str()]);
+    let payload: Value = serde_json::from_str(
+        prime_resp[0]["result"]["content"][0]["text"]
+            .as_str()
+            .unwrap(),
+    )
+    .unwrap();
+    let families = payload["families"].as_array().unwrap();
+    let fam_handle = families[0]["handle"].as_str().unwrap().to_string();
+
+    let req = format!(
+        r#"{{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{{"name":"index_handle","arguments":{{"handle":"{}","project_root":"{}"}}}}}}"#,
+        fam_handle,
+        root.display()
+    );
+    let responses = run_mcp(&[req.as_str()]);
+    assert_eq!(responses[0]["result"]["isError"], false);
+    let out: Value = serde_json::from_str(
+        responses[0]["result"]["content"][0]["text"]
+            .as_str()
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(out["found"], true);
+    assert_eq!(out["kind"], "family");
+    assert_eq!(out["family"]["handle"], fam_handle);
+
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn index_handle_stale_handle_returns_diagnostic() {
+    let root = make_project("index_handle_stale");
+    write_naming_toml(&root);
+    write_source(&root, "src/foo.rs", "fn create_user() {}\n");
+
+    let req = format!(
+        r#"{{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{{"name":"index_handle","arguments":{{"handle":"fam:0000000000000000","project_root":"{}"}}}}}}"#,
+        root.display()
+    );
+    let responses = run_mcp(&[req.as_str()]);
+    assert_eq!(
+        responses[0]["result"]["isError"], false,
+        "stale handle should not be MCP error"
+    );
+    let out: Value = serde_json::from_str(
+        responses[0]["result"]["content"][0]["text"]
+            .as_str()
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(out["found"], false);
+    assert_eq!(out["diagnostic"], "handle_stale");
+
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn index_handle_invalid_format_returns_error_envelope() {
+    let root = make_project("index_handle_invalid");
+    write_naming_toml(&root);
+    write_source(&root, "src/foo.rs", "fn create_user() {}\n");
+
+    let req = format!(
+        r#"{{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{{"name":"index_handle","arguments":{{"handle":"garbage","project_root":"{}"}}}}}}"#,
+        root.display()
+    );
+    let responses = run_mcp(&[req.as_str()]);
+    assert_eq!(responses[0]["result"]["isError"], true);
+    let txt = responses[0]["result"]["content"][0]["text"]
+        .as_str()
+        .unwrap();
+    assert!(
+        txt.contains("invalid handle"),
+        "expected invalid-handle message, got {txt}"
+    );
+
+    let _ = std::fs::remove_dir_all(&root);
 }

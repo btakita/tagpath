@@ -356,6 +356,9 @@ When `--index` is passed, `tagpath search` reads `.naming/index.json` instead of
 | `search` | `query`, `path`, optional `use_index` | `search::search`, or `index::search_index` when `use_index: true` (auto-rebuilds the index when stale or missing; logs a `notice:` to stderr) |
 | `ontology_lookup` | `path`, optional `tag` | `ontology::load_project`, filtered to a single tag when provided |
 | `indexed_project_query` | `path`, optional `tag`, `convention`, `role`, `shape` | Opens `.naming/index.json` (auto-builds if missing, auto-rebuilds if stale) and filters families/members by the supplied facets |
+| `family_by_path` | `path`, optional `project_root`, `auto_build` (default `true`) | Opens `.naming/index.json` and returns every family with a member whose `path` matches the input (canonicalized relative to the project root). Output: `{ families: [{ family_handle, family_id, tags, ontology_refs, members: [{ name, convention, line, member_handle }] }] }`. When the file is not tracked: `{ families: [], diagnostic: "path_not_in_index" }`. Auto-builds the index when missing/stale and `auto_build: true`. |
+| `lint_session_doc` | `path`, optional `fs_checks` (default `false`), `rules` | Wraps `lint::agent_doc::lint_agent_doc`. Output: `{ findings: [LintFinding...], exit_code: 0\|1 }` — `exit_code` mirrors the CLI (0 clean, 1 errors present). `rules` restricts findings to the listed rule IDs. |
+| `index_handle` | `handle` (`fam:...` or `mem:...`), optional `project_root`, `auto_build` (default `true`) | Resolves a stable handle against the current index. For `fam:` returns `{ found: true, kind: "family", family }`; for `mem:` returns `{ found: true, kind: "member", member, family }`. When the handle no longer matches (rename, retag, deletion): `{ found: false, diagnostic: "handle_stale" }`. Invalid handle format (no `fam:`/`mem:` prefix) yields `isError: true`. |
 
 ### 10.4 Example transcript
 

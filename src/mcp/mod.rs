@@ -10,9 +10,9 @@
 
 use serde_json::{Value, json};
 use std::io::{BufRead, BufReader, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
-use crate::{config, index, lint, ontology, parser, query, search};
+use crate::{config, extract, index, lint, ontology, parser, query, search};
 
 mod tools;
 
@@ -146,6 +146,9 @@ fn handle_tools_call(params: &Value) -> Result<Value, (i64, String)> {
         "search" => tool_search(&args),
         "ontology_lookup" => tool_ontology_lookup(&args),
         "indexed_project_query" => tool_indexed_project_query(&args),
+        "family_by_path" => tool_family_by_path(&args),
+        "lint_session_doc" => tool_lint_session_doc(&args),
+        "index_handle" => tool_index_handle(&args),
         other => {
             return Ok(error_content(format!("unknown tool: {other}")));
         }
@@ -360,6 +363,256 @@ fn tool_indexed_project_query(args: &Value) -> Result<Value, String> {
     }))
 }
 
+fn tool_family_by_path(args: &Value) -> Result<Value, String> {
+    let path_str = args
+        .get("path")
+        .and_then(Value::as_str)
+        .ok_or_else(|| "missing argument: path".to_string())?;
+    let input_path = PathBuf::from(path_str);
+    let auto_build = args
+        .get("auto_build")
+        .and_then(Value::as_bool)
+        .unwrap_or(true);
+
+    // Resolve project_root: explicit > auto-detect via .naming.toml.
+    let project_root = if let Some(pr) = args.get("project_root").and_then(Value::as_str) {
+        PathBuf::from(pr)
+    } else {
+        // Auto-detect anchored on the input path (or its parent if it doesn't exist).
+        let anchor = if input_path.exists() {
+            input_path.clone()
+        } else {
+            input_path
+                .parent()
+                .map(Path::to_path_buf)
+                .unwrap_or_else(|| PathBuf::from("."))
+        };
+        index::find_project_root(&anchor).ok_or_else(|| {
+            format!(
+                "no .naming.toml found from {} (pass project_root)",
+                anchor.display()
+            )
+        })?
+    };
+
+    let idx_path = index::index_path(&project_root);
+    if !idx_path.exists() {
+        if auto_build {
+            eprintln!(
+                "notice: auto-building index at {} for family_by_path",
+                idx_path.display()
+            );
+            build_index(&project_root)?;
+        } else {
+            return Err(format!(
+                "index missing at {} (set auto_build: true)",
+                idx_path.display()
+            ));
+        }
+    } else if auto_build {
+        let report = index::check(&project_root)?;
+        if !report.fresh {
+            eprintln!(
+                "notice: index at {} is stale, rebuilding",
+                idx_path.display()
+            );
+            build_index(&project_root)?;
+        }
+    }
+    let idx = index::read(&idx_path)?;
+
+    // Canonicalize input path to a project-relative path with forward slashes.
+    let abs_input = input_path
+        .canonicalize()
+        .unwrap_or_else(|_| input_path.clone());
+    let canonical_root = project_root
+        .canonicalize()
+        .unwrap_or_else(|_| project_root.clone());
+    let rel_input = abs_input
+        .strip_prefix(&canonical_root)
+        .unwrap_or(&abs_input)
+        .to_string_lossy()
+        .replace('\\', "/");
+
+    let mut matched: Vec<Value> = Vec::new();
+    for fam in &idx.families {
+        let members: Vec<&index::FamilyMember> =
+            fam.members.iter().filter(|m| m.path == rel_input).collect();
+        if members.is_empty() {
+            continue;
+        }
+        let mut ontology_refs: Vec<&index::OntologyRef> = idx
+            .ontology_refs
+            .iter()
+            .filter(|o| fam.tags.iter().any(|t| t == &o.tag))
+            .collect();
+        ontology_refs.sort_by(|a, b| a.tag.cmp(&b.tag));
+        matched.push(serde_json::json!({
+            "family_handle": fam.handle,
+            "family_id": fam.family_id,
+            "tags": fam.tags,
+            "ontology_refs": ontology_refs,
+            "members": members
+                .into_iter()
+                .map(|m| serde_json::json!({
+                    "name": m.name,
+                    "convention": m.convention,
+                    "line": m.line,
+                    "member_handle": m.handle,
+                }))
+                .collect::<Vec<_>>(),
+        }));
+    }
+
+    if matched.is_empty() {
+        let tracked = extract::list_source_files(&project_root)
+            .into_iter()
+            .any(|p| {
+                let abs = p.canonicalize().unwrap_or(p.clone());
+                abs == abs_input
+            });
+        if !tracked {
+            return Ok(serde_json::json!({
+                "families": [],
+                "diagnostic": "path_not_in_index",
+            }));
+        }
+    }
+
+    Ok(serde_json::json!({ "families": matched }))
+}
+
+fn tool_lint_session_doc(args: &Value) -> Result<Value, String> {
+    let path_str = args
+        .get("path")
+        .and_then(Value::as_str)
+        .ok_or_else(|| "missing argument: path".to_string())?;
+    let path = PathBuf::from(path_str);
+    let fs_checks = args
+        .get("fs_checks")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let rules: Vec<String> = args
+        .get("rules")
+        .and_then(Value::as_array)
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str().map(str::to_string))
+                .collect()
+        })
+        .unwrap_or_default();
+
+    let text =
+        std::fs::read_to_string(&path).map_err(|e| format!("read {}: {e}", path.display()))?;
+    let opts = lint::AgentDocOptions {
+        fs_checks,
+        rule_filter: rules,
+    };
+    let findings = lint::lint_agent_doc(&path, &text, &opts);
+    let exit_code: u8 = if findings
+        .iter()
+        .any(|f| matches!(f.severity, lint::LintSeverity::Error))
+    {
+        1
+    } else {
+        0
+    };
+    Ok(serde_json::json!({
+        "findings": findings,
+        "exit_code": exit_code,
+    }))
+}
+
+fn tool_index_handle(args: &Value) -> Result<Value, String> {
+    let handle = args
+        .get("handle")
+        .and_then(Value::as_str)
+        .ok_or_else(|| "missing argument: handle".to_string())?
+        .to_string();
+    let auto_build = args
+        .get("auto_build")
+        .and_then(Value::as_bool)
+        .unwrap_or(true);
+
+    let kind = if handle.starts_with("fam:") {
+        "fam"
+    } else if handle.starts_with("mem:") {
+        "mem"
+    } else {
+        return Err(format!(
+            "invalid handle: {handle} (must start with fam: or mem:)"
+        ));
+    };
+
+    let project_root = if let Some(pr) = args.get("project_root").and_then(Value::as_str) {
+        PathBuf::from(pr)
+    } else {
+        index::find_project_root(Path::new(".")).ok_or_else(|| {
+            "no .naming.toml found from current directory (pass project_root)".to_string()
+        })?
+    };
+
+    let idx_path = index::index_path(&project_root);
+    if !idx_path.exists() {
+        if auto_build {
+            eprintln!(
+                "notice: auto-building index at {} for index_handle",
+                idx_path.display()
+            );
+            build_index(&project_root)?;
+        } else {
+            return Err(format!(
+                "index missing at {} (set auto_build: true)",
+                idx_path.display()
+            ));
+        }
+    } else if auto_build {
+        let report = index::check(&project_root)?;
+        if !report.fresh {
+            eprintln!(
+                "notice: index at {} is stale, rebuilding",
+                idx_path.display()
+            );
+            build_index(&project_root)?;
+        }
+    }
+    let idx = index::read(&idx_path)?;
+
+    match kind {
+        "fam" => {
+            if let Some(fam) = idx.families.iter().find(|f| f.handle == handle) {
+                Ok(serde_json::json!({
+                    "found": true,
+                    "kind": "family",
+                    "family": fam,
+                }))
+            } else {
+                Ok(serde_json::json!({
+                    "found": false,
+                    "diagnostic": "handle_stale",
+                }))
+            }
+        }
+        "mem" => {
+            for fam in &idx.families {
+                if let Some(mem) = fam.members.iter().find(|m| m.handle == handle) {
+                    return Ok(serde_json::json!({
+                        "found": true,
+                        "kind": "member",
+                        "member": mem,
+                        "family": fam,
+                    }));
+                }
+            }
+            Ok(serde_json::json!({
+                "found": false,
+                "diagnostic": "handle_stale",
+            }))
+        }
+        _ => unreachable!(),
+    }
+}
+
 /// Run `index::build` + `index::write` for the given project root.
 fn build_index(project_root: &std::path::Path) -> Result<(), String> {
     let opts = index::BuildOptions {
@@ -396,6 +649,9 @@ mod tests {
             "search",
             "ontology_lookup",
             "indexed_project_query",
+            "family_by_path",
+            "lint_session_doc",
+            "index_handle",
         ] {
             assert!(names.contains(&expected), "missing tool {expected}");
         }

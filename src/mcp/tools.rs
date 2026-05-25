@@ -15,6 +15,9 @@ pub fn definitions() -> Vec<Value> {
         search_tool(),
         ontology_lookup_tool(),
         indexed_project_query_tool(),
+        family_by_path_tool(),
+        lint_session_doc_tool(),
+        index_handle_tool(),
     ]
 }
 
@@ -88,6 +91,54 @@ fn ontology_lookup_tool() -> Value {
                 "tag": { "type": "string", "description": "Optional single-tag filter" },
             },
             "required": ["path"],
+        },
+    })
+}
+
+fn family_by_path_tool() -> Value {
+    json!({
+        "name": "family_by_path",
+        "description": "Return every indexed family whose members include a record for the given source file. Opens .naming/index.json (auto-builds when missing/stale). Members are filtered to only those matching the input path. Returns `{ families: [...], diagnostic? }`; `diagnostic: \"path_not_in_index\"` when the file is unknown to the index and is not a tracked source.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "path": { "type": "string", "description": "absolute or project-relative source file path" },
+                "project_root": { "type": "string", "description": "optional project root; auto-detected via .naming.toml if omitted" },
+                "auto_build": { "type": "boolean", "default": true, "description": "rebuild index if missing or stale" },
+            },
+            "required": ["path"],
+        },
+    })
+}
+
+fn lint_session_doc_tool() -> Value {
+    json!({
+        "name": "lint_session_doc",
+        "description": "Lint an agent-doc session-document markdown file. Wraps `lint::agent_doc::lint_agent_doc`. Returns `{ findings: [...], exit_code: 0|1 }`; exit_code mirrors the CLI (0 clean, 1 findings present).",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "path": { "type": "string", "description": "session-document markdown path" },
+                "fs_checks": { "type": "boolean", "default": false, "description": "enable filesystem-dependent rules (#9, #12)" },
+                "rules": { "type": "array", "items": { "type": "string" }, "description": "restrict to specific rule IDs" },
+            },
+            "required": ["path"],
+        },
+    })
+}
+
+fn index_handle_tool() -> Value {
+    json!({
+        "name": "index_handle",
+        "description": "Resolve a `fam:` or `mem:` handle against the current project index. For `fam:` returns the full family record; for `mem:` returns `{ member, family }`. When the handle no longer matches the live index (rename, retag, deletion), returns `{ found: false, diagnostic: \"handle_stale\" }` so consumers can react. Invalid handle formats (no `fam:`/`mem:` prefix) yield an `isError: true` envelope.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "handle": { "type": "string", "description": "fam:... or mem:... handle from a prior index" },
+                "project_root": { "type": "string", "description": "optional project root; auto-detected via .naming.toml if omitted" },
+                "auto_build": { "type": "boolean", "default": true, "description": "rebuild index if missing or stale" },
+            },
+            "required": ["handle"],
         },
     })
 }
