@@ -762,3 +762,98 @@ Performance contract: on a 1000-source synthetic repo, the sidecar
 fast path takes `--update` no-op cycles to ~1-3 ms (vs ~100-180 ms
 for a full rebuild) — roughly 50× faster, comfortably past the ≥10×
 bar the sidecar was introduced to hit.
+
+## 16. Agent-doc dialect
+
+The `tagpath lint` command supports a second dialect, `agent-doc`, that
+validates HTML-comment directives used by session documents
+(`agent-doc`, Claude Code / Codex / OpenCode / direct harnesses). The
+identifier-naming lint is unchanged; this is a sibling dialect.
+
+### 16.1 CLI
+
+```
+tagpath lint <file_or_dir>                          # auto-detect
+tagpath lint <file> --dialect agent-doc
+tagpath lint <file> --dialect agent-doc --fs-checks
+tagpath lint <file> --dialect agent-doc --format json
+tagpath lint <file> --dialect agent-doc --rule agent-doc/malformed-attr
+```
+
+- `--dialect` accepts `identifier`, `agent-doc`, or `auto` (default).
+  In auto mode, a markdown file containing `<!-- agent:exchange` is
+  routed through the agent-doc dialect; otherwise the identifier lint
+  runs.
+- `--fs-checks` enables rules that require disk reads (archive target
+  existence, done-id cross-reference).
+- `--rule <id>` is repeatable and restricts findings to specific rule
+  IDs.
+- Exit codes: `0` clean, `1` findings present (any error severity),
+  `2` internal error.
+
+### 16.2 Tag families recognized
+
+Component tags (open + close):
+`agent:exchange`, `agent:status`, `agent:backlog`, `agent:done`,
+`agent:icebox`, `agent:queue`, `agent:review`.
+
+Single-instance directives: `agent:boundary:<hex>`,
+`no-pending-done-guard`.
+
+Patch markers (paired): `patch:exchange`, `patch:status`,
+`patch:backlog`, `patch:review`.
+
+### 16.3 Rules
+
+| Rule ID                                | Severity | Description                                                      |
+| -------------------------------------- | -------- | ---------------------------------------------------------------- |
+| `agent-doc/unknown-component`          | error    | `<!-- agent:foo -->` where `foo` is not a known component        |
+| `agent-doc/unclosed-component`         | error    | open component without a matching close                          |
+| `agent-doc/orphan-close`               | error    | `<!-- /agent:foo -->` without a preceding open                   |
+| `agent-doc/duplicate-component`        | error    | same component reopened before its prior close                   |
+| `agent-doc/malformed-attr`             | error    | attribute token missing `=` (e.g. `archive PATH`)                |
+| `agent-doc/empty-attr-value`           | error    | `key=` with no value (or `key=""`)                               |
+| `agent-doc/unknown-attr`               | warning  | attribute not allowed on this component                          |
+| `agent-doc/queue-mode-token`           | error    | `agent:queue mode=auto` instead of bare `agent:queue auto`       |
+| `agent-doc/malformed-boundary`         | error    | `agent:boundary:` without hex id                                 |
+| `agent-doc/unknown-patch-marker`       | warning  | `patch:<name>` not in `exchange/status/backlog/review`           |
+| `agent-doc/patch-marker-outside-cycle` | warning  | `patch:exchange` outside an `agent:exchange` block               |
+| `agent-doc/backlog-id-collision`       | error    | duplicate `[#id]` inside one backlog block                       |
+| `agent-doc/done-archive-missing-target`| error    | `archive=<path>` is missing on disk or not `.done.md` (fs-checks)|
+| `agent-doc/done-id-not-in-backlog`     | warning  | done item id never appeared in backlog (fs-checks)               |
+
+Rules `done-archive-missing-target` and `done-id-not-in-backlog`
+require `--fs-checks`. The done-id check is suppressed for blocks
+whose first line is `<!-- migrated -->` (or `# migrated`).
+
+### 16.4 Output
+
+Text format mirrors the identifier-lint style:
+
+```
+tasks/foo.md:42:1 error: attribute `archive` on `agent:done` is missing `=value` [agent-doc/malformed-attr]
+  hint: try `archive=<value>`
+```
+
+JSON format (`--format json`) emits an array of:
+
+```jsonc
+{
+  "path": "tasks/foo.md",
+  "line": 42,
+  "col": 1,
+  "rule": "agent-doc/malformed-attr",
+  "severity": "error",
+  "message": "...",
+  "fix_hint": "try `archive=<value>`"
+}
+```
+
+### 16.5 Motivating bug
+
+`<!-- agent:done archive PATH -->` (missing `=`) was silently parsed as
+`archive=""` by older session-document tooling and only failed deep
+inside the agent-doc `finalize` step. The
+`agent-doc/malformed-attr` rule fires on this form so the failure
+surfaces at lint time, before the directive can reach `finalize`.
+

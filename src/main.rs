@@ -40,7 +40,7 @@ enum Commands {
         #[arg(short, long)]
         preset: Option<String>,
     },
-    /// Lint identifiers against .naming.toml rules
+    /// Lint identifiers against .naming.toml rules, or agent-doc session-document tags
     Lint {
         /// Path to lint
         #[arg(default_value = ".")]
@@ -48,6 +48,15 @@ enum Commands {
         /// Output format
         #[arg(short, long, default_value = "text")]
         format: String,
+        /// Dialect: `identifier` (default), `agent-doc`, or `auto`
+        #[arg(long, default_value = "auto")]
+        dialect: String,
+        /// Enable filesystem-dependent checks (agent-doc dialect only)
+        #[arg(long)]
+        fs_checks: bool,
+        /// Restrict to specific rule IDs (repeatable; agent-doc dialect only)
+        #[arg(long = "rule")]
+        rules: Vec<String>,
     },
     /// Extract identifiers from source files and parse their tag structure
     Extract {
@@ -206,7 +215,13 @@ fn main() {
             format,
         } => cmd_parse(&name, convention.as_deref(), &format),
         Commands::Init { lang, preset } => cmd_init(lang.as_deref(), preset.as_deref()),
-        Commands::Lint { path, format } => cmd_lint(&path, &format),
+        Commands::Lint {
+            path,
+            format,
+            dialect,
+            fs_checks,
+            rules,
+        } => cmd_lint(&path, &format, &dialect, fs_checks, &rules),
         Commands::Extract { path, format, ast } => cmd_extract(&path, &format, ast),
         Commands::Search {
             query,
@@ -310,7 +325,58 @@ fn cmd_init(lang: Option<&str>, preset: Option<&str>) {
     println!("Created .naming.toml");
 }
 
-fn cmd_lint(path: &std::path::Path, format: &str) {
+fn cmd_lint(
+    path: &std::path::Path,
+    format: &str,
+    dialect: &str,
+    fs_checks: bool,
+    rules: &[String],
+) {
+    let run_agent_doc = matches!(dialect, "agent-doc" | "agentdoc");
+    let run_identifier = matches!(dialect, "identifier" | "ident");
+    let run_auto = matches!(dialect, "auto" | "");
+
+    if run_agent_doc {
+        let code = run_agent_doc_lint(path, format, fs_checks, rules);
+        std::process::exit(code);
+    }
+
+    if run_auto {
+        // Auto-detect agent-doc files (single file fast path); for
+        // directories we route to identifier lint and rely on per-file
+        // detection inside the markdown walker.
+        if path.is_file() {
+            if let Ok(text) = std::fs::read_to_string(path)
+                && lint::looks_like_agent_doc(&text)
+            {
+                let code = run_agent_doc_lint(path, format, fs_checks, rules);
+                std::process::exit(code);
+            }
+        } else if path.is_dir() {
+            // Walk and collect markdown files for agent-doc lint, then
+            // continue with identifier lint on the same root.
+            let code_md = run_agent_doc_lint_dir(path, format, fs_checks, rules);
+            // If the dir contains no .naming.toml, the identifier pass
+            // would error out — only run it when a config can be found.
+            if lint::find_config(path).is_none() {
+                std::process::exit(code_md);
+            }
+            let code_id = run_identifier_lint(path, format);
+            std::process::exit(code_md.max(code_id));
+        }
+    }
+
+    if run_identifier || run_auto {
+        let code = run_identifier_lint(path, format);
+        std::process::exit(code);
+    }
+
+    eprintln!("error: unknown dialect `{dialect}`");
+    eprintln!("hint: use `identifier`, `agent-doc`, or `auto`");
+    std::process::exit(2);
+}
+
+fn run_identifier_lint(path: &std::path::Path, format: &str) -> i32 {
     // Find .naming.toml by walking up from the target path
     let config_path = match lint::find_config(path) {
         Some(p) => p,
@@ -320,20 +386,24 @@ fn cmd_lint(path: &std::path::Path, format: &str) {
                 path.display()
             );
             eprintln!("hint: run `tagpath init` to create one");
-            std::process::exit(1);
+            return 2;
         }
     };
     let naming_config = match config::resolve(&config_path) {
         Ok(c) => c,
         Err(e) => {
             eprintln!("error: {e}");
-            std::process::exit(1);
+            return 2;
         }
     };
     let violations = lint::lint(path, &naming_config);
     if violations.is_empty() {
-        println!("No naming convention violations found.");
-        return;
+        if format != "json" {
+            println!("No naming convention violations found.");
+        } else {
+            println!("[]");
+        }
+        return 0;
     }
     match format {
         "json" => {
@@ -355,7 +425,99 @@ fn cmd_lint(path: &std::path::Path, format: &str) {
             eprintln!("\nFound {} violation(s).", violations.len());
         }
     }
-    std::process::exit(1);
+    1
+}
+
+fn run_agent_doc_lint(
+    path: &std::path::Path,
+    format: &str,
+    fs_checks: bool,
+    rules: &[String],
+) -> i32 {
+    let opts = lint::AgentDocOptions {
+        fs_checks,
+        rule_filter: rules.to_vec(),
+    };
+    let mut all = Vec::new();
+    if path.is_file() {
+        match std::fs::read_to_string(path) {
+            Ok(text) => {
+                all.extend(lint::lint_agent_doc(path, &text, &opts));
+            }
+            Err(e) => {
+                eprintln!("error: read {}: {e}", path.display());
+                return 2;
+            }
+        }
+    } else if path.is_dir() {
+        for entry in walkdir::WalkDir::new(path) {
+            let entry = match entry {
+                Ok(e) => e,
+                Err(e) => {
+                    eprintln!("error: walk: {e}");
+                    return 2;
+                }
+            };
+            if !entry.file_type().is_file() {
+                continue;
+            }
+            let p = entry.path();
+            if p.extension().and_then(|e| e.to_str()) != Some("md") {
+                continue;
+            }
+            if let Ok(text) = std::fs::read_to_string(p) {
+                if !lint::looks_like_agent_doc(&text) {
+                    continue;
+                }
+                all.extend(lint::lint_agent_doc(p, &text, &opts));
+            }
+        }
+    } else {
+        eprintln!("error: path does not exist: {}", path.display());
+        return 2;
+    }
+    emit_agent_doc_findings(format, &all);
+    if all
+        .iter()
+        .any(|f| matches!(f.severity, lint::LintSeverity::Error))
+    {
+        1
+    } else {
+        0
+    }
+}
+
+fn run_agent_doc_lint_dir(
+    path: &std::path::Path,
+    format: &str,
+    fs_checks: bool,
+    rules: &[String],
+) -> i32 {
+    run_agent_doc_lint(path, format, fs_checks, rules)
+}
+
+fn emit_agent_doc_findings(format: &str, findings: &[lint::LintFinding]) {
+    match format {
+        "json" => {
+            println!("{}", serde_json::to_string_pretty(findings).unwrap());
+        }
+        _ => {
+            if findings.is_empty() {
+                println!("No agent-doc tag violations found.");
+                return;
+            }
+            print!("{}", lint::format_findings_text(findings));
+            let errors = findings
+                .iter()
+                .filter(|f| matches!(f.severity, lint::LintSeverity::Error))
+                .count();
+            let warnings = findings.len() - errors;
+            eprintln!(
+                "\nFound {} error(s), {} warning(s) in agent-doc tags.",
+                errors, warnings
+            );
+        }
+    }
 }
 
 /// Generate a human-readable context label from the convention context

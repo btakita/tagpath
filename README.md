@@ -51,6 +51,10 @@ tagpath search "validate_user" src/ --format family
 # Lint against .naming.toml rules
 tagpath lint src/
 
+# Lint agent-doc session-document HTML-comment tags (sibling dialect)
+tagpath lint --dialect agent-doc tasks/
+tagpath lint --dialect agent-doc tasks/foo.md --fs-checks --format json
+
 # Generate cross-convention aliases
 tagpath alias person_name
 # snake_case:      person_name

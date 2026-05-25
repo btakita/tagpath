@@ -5,6 +5,12 @@ use crate::treesitter::IdentifierContext;
 use serde::Serialize;
 use std::path::{Path, PathBuf};
 
+pub mod agent_doc;
+pub use agent_doc::{
+    AgentDocOptions, LintFinding, LintSeverity, format_findings_text, lint_agent_doc,
+    looks_like_agent_doc,
+};
+
 /// A lint violation found during convention checking
 #[derive(Debug, Serialize)]
 pub struct LintViolation {
