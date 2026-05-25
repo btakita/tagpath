@@ -288,15 +288,31 @@ fn check_single_comment(path: &Path, c: &Comment, out: &mut Vec<LintFinding>) {
             }
         }
         CommentKind::Boundary { hex } => {
-            if hex.is_empty() || !hex.chars().all(|c| c.is_ascii_hexdigit()) {
+            // Canonical binary format: `<hex>` or `<hex>:<slug>`.
+            // - hex: non-empty ASCII hex (binary emits 8 chars; older docs may have more)
+            // - slug (optional): non-empty lowercase alphanumeric + dashes,
+            //   produced by `new_boundary_id_with_summary`
+            let (id, slug) = match hex.split_once(':') {
+                Some((id, slug)) => (id, Some(slug)),
+                None => (hex, None),
+            };
+            let id_ok = !id.is_empty() && id.chars().all(|c| c.is_ascii_hexdigit());
+            let slug_ok = slug.is_none_or(|s| {
+                !s.is_empty()
+                    && s.chars()
+                        .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+            });
+            if !id_ok || !slug_ok {
                 out.push(LintFinding {
                     path: path.to_path_buf(),
                     line: c.line,
                     col: c.col,
                     rule: "agent-doc/malformed-boundary".to_string(),
                     severity: LintSeverity::Error,
-                    message: format!("agent:boundary expects a hex id, got `{hex}`"),
-                    fix_hint: Some("use `<!-- agent:boundary:<8+ hex chars> -->`".to_string()),
+                    message: format!("agent:boundary expects `<hex>` or `<hex>:<slug>`, got `{hex}`"),
+                    fix_hint: Some(
+                        "use `<!-- agent:boundary:<hex> -->` or `<!-- agent:boundary:<hex>:<slug> -->` (slug: lowercase a-z0-9-)".to_string(),
+                    ),
                 });
             }
         }
@@ -1034,6 +1050,66 @@ content
     fn looks_like_agent_doc_detects() {
         assert!(looks_like_agent_doc("<!-- agent:exchange patch=append -->"));
         assert!(!looks_like_agent_doc("# just a heading\n"));
+    }
+
+    #[test]
+    fn boundary_plain_hex_passes() {
+        let text = "<!-- agent:exchange -->\n<!-- agent:boundary:a0cfeb34 -->\n<!-- /agent:exchange -->\n";
+        let findings = lint_str(text);
+        assert!(
+            !findings.iter().any(|f| f.rule == "agent-doc/malformed-boundary"),
+            "plain hex boundary should pass, got: {findings:#?}"
+        );
+    }
+
+    #[test]
+    fn boundary_hex_with_summary_slug_passes() {
+        let text = "<!-- agent:exchange -->\n<!-- agent:boundary:a0cfeb34:boundary-fix -->\n<!-- /agent:exchange -->\n";
+        let findings = lint_str(text);
+        assert!(
+            !findings.iter().any(|f| f.rule == "agent-doc/malformed-boundary"),
+            "hex:slug boundary should pass, got: {findings:#?}"
+        );
+    }
+
+    #[test]
+    fn boundary_non_hex_id_fails() {
+        let text = "<!-- agent:exchange -->\n<!-- agent:boundary:zzz -->\n<!-- /agent:exchange -->\n";
+        let findings = lint_str(text);
+        assert!(
+            findings.iter().any(|f| f.rule == "agent-doc/malformed-boundary"),
+            "non-hex id should fail, got: {findings:#?}"
+        );
+    }
+
+    #[test]
+    fn boundary_empty_id_fails() {
+        let text = "<!-- agent:exchange -->\n<!-- agent:boundary: -->\n<!-- /agent:exchange -->\n";
+        let findings = lint_str(text);
+        assert!(
+            findings.iter().any(|f| f.rule == "agent-doc/malformed-boundary"),
+            "empty id should fail, got: {findings:#?}"
+        );
+    }
+
+    #[test]
+    fn boundary_uppercase_slug_fails() {
+        let text = "<!-- agent:exchange -->\n<!-- agent:boundary:a0cfeb34:Boundary-Fix -->\n<!-- /agent:exchange -->\n";
+        let findings = lint_str(text);
+        assert!(
+            findings.iter().any(|f| f.rule == "agent-doc/malformed-boundary"),
+            "uppercase in slug should fail (binary lowercases), got: {findings:#?}"
+        );
+    }
+
+    #[test]
+    fn boundary_empty_slug_fails() {
+        let text = "<!-- agent:exchange -->\n<!-- agent:boundary:a0cfeb34: -->\n<!-- /agent:exchange -->\n";
+        let findings = lint_str(text);
+        assert!(
+            findings.iter().any(|f| f.rule == "agent-doc/malformed-boundary"),
+            "trailing colon with empty slug should fail, got: {findings:#?}"
+        );
     }
 
     #[test]

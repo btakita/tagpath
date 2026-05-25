@@ -904,7 +904,7 @@ Patch markers (paired): `patch:exchange`, `patch:status`,
 | `agent-doc/empty-attr-value`           | error    | `key=` with no value (or `key=""`)                               |
 | `agent-doc/unknown-attr`               | warning  | attribute not allowed on this component                          |
 | `agent-doc/queue-mode-token`           | error    | `agent:queue mode=auto` instead of bare `agent:queue auto`       |
-| `agent-doc/malformed-boundary`         | error    | `agent:boundary:` without hex id                                 |
+| `agent-doc/malformed-boundary`         | error    | `agent:boundary:` not in `<hex>` or `<hex>:<slug>` form          |
 | `agent-doc/unknown-patch-marker`       | warning  | `patch:<name>` not in `exchange/status/backlog/review`           |
 | `agent-doc/patch-marker-outside-cycle` | warning  | `patch:exchange` outside an `agent:exchange` block               |
 | `agent-doc/backlog-id-collision`       | error    | duplicate `[#id]` inside one backlog block                       |
