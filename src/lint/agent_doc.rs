@@ -52,6 +52,21 @@ const KNOWN_COMPONENTS: &[&str] = &[
     "agent:review",
 ];
 
+/// Legacy component names that agent-doc still accepts as migration inputs.
+/// Recognized by the lint so legacy session docs do not fail closed before
+/// `agent-doc migrate` runs. See agent-doc's `src/migrate.rs` for the canonical
+/// rename map (agent:pending → agent:backlog, agent:pending-done /
+/// agent:backlog-done → agent:done).
+const LEGACY_COMPONENTS: &[&str] = &[
+    "agent:pending",
+    "agent:pending-done",
+    "agent:backlog-done",
+];
+
+fn is_known_component(name: &str) -> bool {
+    KNOWN_COMPONENTS.contains(&name) || LEGACY_COMPONENTS.contains(&name)
+}
+
 /// Returns true if the file *looks like* an agent-doc session document.
 /// Used by callers for auto-detection when no `--dialect` flag is given.
 pub fn looks_like_agent_doc(text: &str) -> bool {
@@ -347,10 +362,6 @@ fn check_single_comment(path: &Path, c: &Comment, out: &mut Vec<LintFinding>) {
         CommentKind::Replace => {}
         CommentKind::Other => {}
     }
-}
-
-fn is_known_component(name: &str) -> bool {
-    KNOWN_COMPONENTS.contains(&name)
 }
 
 /// Parse and validate the attribute portion of an open-component tag.
@@ -1050,6 +1061,46 @@ content
     fn looks_like_agent_doc_detects() {
         assert!(looks_like_agent_doc("<!-- agent:exchange patch=append -->"));
         assert!(!looks_like_agent_doc("# just a heading\n"));
+    }
+
+    #[test]
+    fn legacy_agent_pending_component_accepted() {
+        let text = "<!-- agent:pending -->\n- [ ] [#x] item\n<!-- /agent:pending -->\n";
+        let findings = lint_str(text);
+        assert!(
+            !findings.iter().any(|f| f.rule == "agent-doc/unknown-component"),
+            "legacy agent:pending should be accepted, got: {findings:#?}"
+        );
+    }
+
+    #[test]
+    fn legacy_pending_done_component_accepted() {
+        let text = "<!-- agent:pending-done -->\nitem\n<!-- /agent:pending-done -->\n";
+        let findings = lint_str(text);
+        assert!(
+            !findings.iter().any(|f| f.rule == "agent-doc/unknown-component"),
+            "legacy agent:pending-done should be accepted, got: {findings:#?}"
+        );
+    }
+
+    #[test]
+    fn legacy_backlog_done_component_accepted() {
+        let text = "<!-- agent:backlog-done -->\nitem\n<!-- /agent:backlog-done -->\n";
+        let findings = lint_str(text);
+        assert!(
+            !findings.iter().any(|f| f.rule == "agent-doc/unknown-component"),
+            "legacy agent:backlog-done should be accepted, got: {findings:#?}"
+        );
+    }
+
+    #[test]
+    fn unknown_component_still_fails() {
+        let text = "<!-- agent:bogus -->\nitem\n<!-- /agent:bogus -->\n";
+        let findings = lint_str(text);
+        assert!(
+            findings.iter().any(|f| f.rule == "agent-doc/unknown-component"),
+            "truly unknown component should still fail, got: {findings:#?}"
+        );
     }
 
     #[test]

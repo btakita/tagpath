@@ -1,5 +1,15 @@
 # tagpath versions
 
+## v0.11.1 — 2026-05-25
+
+Backwards-compat patch for the agent-doc dialect.
+
+### Lint rule changes
+
+- `agent-doc/unknown-component` no longer fires on the legacy component names that agent-doc still accepts as migration inputs: `agent:pending`, `agent:pending-done`, `agent:backlog-done`. The fix-hint still suggests canonical names; legacy forms are accepted silently so legacy session docs do not fail closed before `agent-doc migrate` runs (`p6adftestfix`).
+
+Unblocks agent-doc CI run `26385513733` (and successors) which were red on ~14 `finalize_*` integration tests using legacy `agent:pending` fixtures.
+
 ## v0.11.0 — 2026-05-25
 
 First release since v0.10.0 (2025). Versions 0.11–0.18 were tagged locally in `Cargo.toml` during incremental development but never published; this release consolidates the work into a single 0.11.0 publish on crates.io.
