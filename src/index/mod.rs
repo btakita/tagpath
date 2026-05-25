@@ -14,6 +14,8 @@ use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use crate::{config, extract, lint, ontology, parser};
 
+pub mod sidecar;
+
 /// Current on-disk schema version.
 ///
 /// Bumped to `2` in tagpath 0.11.0 when stable `handle` fields were added to
@@ -340,6 +342,29 @@ pub struct UpdateResult {
     pub summary: UpdateSummary,
 }
 
+/// Output shape requested from [`update_incremental_with`].
+///
+/// Internal knob (CLI-only). The library entrypoint
+/// [`update_incremental`] always asks for [`Full`] so callers see the
+/// complete `Index`; the CLI fast path can opt into [`LazyTail`] to
+/// skip the relatively expensive bincode decode of the
+/// `families`/`ontology_refs` tail when an update is a true no-op.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IndexShape {
+    /// Always return a fully-populated `Index`. Required for callers
+    /// that consume `families`/`ontology_refs` (NDJSON stream, library
+    /// callers, tests).
+    Full,
+    /// On a true no-op cycle, leave `families` and `ontology_refs` as
+    /// empty `Vec`s and skip the tail decode entirely. On any non-noop
+    /// cycle this behaves like [`Full`] because the caller is about to
+    /// rebuild families anyway. The CLI uses this in the bare
+    /// `tagpath index --update` path because it only consults the
+    /// summary; the discarded `Index` saves ~7-10ms per cycle on a
+    /// 1000-source repo.
+    LazyTail,
+}
+
 /// Incrementally update an on-disk index by reusing cached source entries
 /// and re-extracting only the files whose content actually changed.
 ///
@@ -354,6 +379,15 @@ pub struct UpdateResult {
 /// / added / removed / unchanged` reflect the file counts of the rebuilt
 /// index (added = sources, the rest zero) so the digest stays meaningful.
 pub fn update_incremental(opts: &BuildOptions) -> Result<UpdateResult, String> {
+    update_incremental_with(opts, IndexShape::Full)
+}
+
+/// Like [`update_incremental`] but lets the caller opt into the
+/// CLI-fast-path tail-skip behaviour. See [`IndexShape`].
+pub fn update_incremental_with(
+    opts: &BuildOptions,
+    shape: IndexShape,
+) -> Result<UpdateResult, String> {
     let started = Instant::now();
     let project_root = &opts.project_root;
     let idx_path = index_path(project_root);
@@ -379,15 +413,70 @@ pub fn update_incremental(opts: &BuildOptions) -> Result<UpdateResult, String> {
     if !idx_path.exists() {
         return full_rebuild(Some(FallbackReason::IndexMissing));
     }
-    let existing = match read(&idx_path) {
-        Ok(i) => i,
-        Err(message) => {
-            return full_rebuild(Some(FallbackReason::IndexUnreadable(message)));
+    // Try the binary sidecar first. The two-payload framing lets us
+    // decode the cheap head (schema/config/sources, a few hundred KB on
+    // a 1000-source repo) without ever touching the much heavier tail
+    // (families/ontology_refs, ~4-5 MB). The tail is only decoded on
+    // the non-noop path further down. On any framing failure (missing,
+    // corrupt, schema skew, hash mismatch, …) we silently fall back to
+    // the JSON read path, then regenerate the sidecar before returning
+    // so the next cycle hits the fast path again.
+    let side_path = sidecar::sidecar_path_for(&idx_path);
+    // `sidecar_bytes` holds the whole buffer when we got it from the
+    // sidecar so the non-noop branch can decode the tail without a
+    // second disk read.
+    let mut sidecar_bytes: Option<Vec<u8>> = None;
+    let mut existing_head: Option<sidecar::SidecarHead> = None;
+    match sidecar::read_bytes(&side_path) {
+        Ok(bytes) => match sidecar::decode_head(&bytes) {
+            Ok(head) => {
+                sidecar::debug_log("hit");
+                existing_head = Some(head);
+                sidecar_bytes = Some(bytes);
+            }
+            Err(reason) => {
+                sidecar::debug_log(&format!("miss:{}", reason.as_str()));
+            }
+        },
+        Err(reason) => {
+            sidecar::debug_log(&format!("miss:{}", reason.as_str()));
         }
     };
-    if existing.schema_version != SCHEMA_VERSION {
+    // Always reserve a JSON fallback closure: if the sidecar failed
+    // (existing_head still None) we read JSON now; otherwise we defer
+    // the JSON read until the non-noop path actually needs the tail
+    // we don't yet have. Captured here because the existing JSON
+    // payload is also what we'll re-emit into the sidecar when the
+    // fast path was unavailable.
+    let read_json_existing = || -> Result<Index, String> { read(&idx_path) };
+
+    let mut existing_full: Option<Index> = None;
+    let sidecar_was_authoritative = existing_head.is_some();
+    if existing_head.is_none() {
+        let idx = match read_json_existing() {
+            Ok(i) => i,
+            Err(message) => {
+                return full_rebuild(Some(FallbackReason::IndexUnreadable(message)));
+            }
+        };
+        existing_head = Some(sidecar::SidecarHead {
+            generated_at: idx.generated_at.clone(),
+            config_fingerprint: idx.config_fingerprint.clone(),
+            tool_version: idx.tool_version.clone(),
+            sources: idx.sources.clone(),
+        });
+        existing_full = Some(idx);
+    }
+    // SAFETY: existing_head is Some on every path above.
+    let existing_head = existing_head.unwrap();
+    // We do not encode `schema_version` in the head itself — the
+    // frame header check already enforced it on the sidecar path, and
+    // the JSON read path validates it below using existing_full.
+    if let Some(ref full) = existing_full
+        && full.schema_version != SCHEMA_VERSION
+    {
         return full_rebuild(Some(FallbackReason::SchemaVersionMismatch {
-            found: existing.schema_version,
+            found: full.schema_version,
             expected: SCHEMA_VERSION,
         }));
     }
@@ -402,12 +491,12 @@ pub fn update_incremental(opts: &BuildOptions) -> Result<UpdateResult, String> {
     }
     let resolved = config::resolve(&config_path)?;
     let config_fingerprint = fingerprint_config(&resolved)?;
-    if existing.config_fingerprint != config_fingerprint {
+    if existing_head.config_fingerprint != config_fingerprint {
         return full_rebuild(Some(FallbackReason::ConfigFingerprintMismatch));
     }
 
     // Index existing sources for quick lookup.
-    let existing_by_path: BTreeMap<&str, &Source> = existing
+    let existing_by_path: BTreeMap<&str, &Source> = existing_head
         .sources
         .iter()
         .map(|s| (s.path.as_str(), s))
@@ -480,7 +569,7 @@ pub fn update_incremental(opts: &BuildOptions) -> Result<UpdateResult, String> {
 
     // Detect removals.
     let current_paths: BTreeSet<&str> = classifications.keys().map(String::as_str).collect();
-    let removed: Vec<String> = existing
+    let removed: Vec<String> = existing_head
         .sources
         .iter()
         .filter(|s| !current_paths.contains(s.path.as_str()))
@@ -504,15 +593,97 @@ pub fn update_incremental(opts: &BuildOptions) -> Result<UpdateResult, String> {
     // rebuilding the family map (~30ms on a 1000-file repo) and lets the
     // CLI also skip the JSON serialize + atomic rename.
     if changed_count == 0 && added_count == 0 && removed.is_empty() {
+        // Fast no-op path. Two sub-modes controlled by `shape`:
+        //
+        //   - `IndexShape::Full` (library callers, NDJSON CLI path,
+        //     tests): materialise the full `Index` by decoding the
+        //     sidecar tail (or falling back to JSON read).
+        //   - `IndexShape::LazyTail` (bare CLI fast path): leave
+        //     `families`/`ontology_refs` empty. Saves ~7-10ms by
+        //     skipping the bincode decode of ~15k families. Also lets
+        //     us skip regenerating the sidecar tail when the head was
+        //     authoritative — the on-disk tail is still byte-correct,
+        //     we just chose not to read it.
+        let need_tail_for_index = matches!(shape, IndexShape::Full);
+        // On the head-only fast path we still want to *verify* the
+        // sidecar's tail when we read from sidecar, so a silent
+        // corruption on the tail does not survive across no-op cycles.
+        // The cost of `decode_tail` itself is mostly the bincode
+        // allocate; we get most of the win by skipping the deserialize
+        // when the caller doesn't need the data. So when LazyTail is
+        // set we trust the sidecar tail as-is and let a future
+        // non-noop / full read catch corruption then.
+        let mut tail_came_from_json = false;
+        let tail: sidecar::SidecarTail = if need_tail_for_index {
+            if let Some(ref full) = existing_full {
+                sidecar::SidecarTail {
+                    families: full.families.clone(),
+                    ontology_refs: full.ontology_refs.clone(),
+                }
+            } else if let Some(ref bytes) = sidecar_bytes {
+                match sidecar::decode_tail(bytes) {
+                    Ok(t) => t,
+                    Err(reason) => {
+                        sidecar::debug_log(&format!("tail_miss:{}", reason.as_str()));
+                        tail_came_from_json = true;
+                        match read(&idx_path) {
+                            Ok(full) => sidecar::SidecarTail {
+                                families: full.families,
+                                ontology_refs: full.ontology_refs,
+                            },
+                            Err(message) => {
+                                return full_rebuild(Some(FallbackReason::IndexUnreadable(
+                                    message,
+                                )));
+                            }
+                        }
+                    }
+                }
+            } else {
+                return full_rebuild(Some(FallbackReason::IndexMissing));
+            }
+        } else {
+            sidecar::debug_log("lazy_tail_skipped");
+            sidecar::SidecarTail {
+                families: Vec::new(),
+                ontology_refs: Vec::new(),
+            }
+        };
+
         let idx = Index {
             schema_version: SCHEMA_VERSION,
             generated_at: iso8601_utc_now(),
-            config_fingerprint,
+            config_fingerprint: config_fingerprint.clone(),
             tool_version: env!("CARGO_PKG_VERSION").to_string(),
             sources: new_sources,
-            families: existing.families.clone(),
-            ontology_refs: existing.ontology_refs.clone(),
+            families: tail.families.clone(),
+            ontology_refs: tail.ontology_refs.clone(),
         };
+
+        // Regenerate the sidecar whenever we did not trust the on-disk
+        // copy end-to-end — either the head fell back to JSON, or the
+        // tail did. On the LazyTail path we did not decode the tail,
+        // so we can only regenerate when we have a tail in hand
+        // (sidecar head was good); skip regen otherwise and let a
+        // future Full cycle repair it. We do not touch the JSON file
+        // because no-op cycles intentionally skip the rename(2) to
+        // preserve mtime semantics.
+        if need_tail_for_index && (!sidecar_was_authoritative || tail_came_from_json) {
+            let existing_for_sidecar = Index {
+                schema_version: SCHEMA_VERSION,
+                generated_at: existing_head.generated_at.clone(),
+                config_fingerprint: existing_head.config_fingerprint.clone(),
+                tool_version: existing_head.tool_version.clone(),
+                sources: existing_head.sources.clone(),
+                families: tail.families,
+                ontology_refs: tail.ontology_refs,
+            };
+            if let Err(e) = sidecar::write(&existing_for_sidecar, &side_path) {
+                sidecar::debug_log(&format!("regen_failed:{e}"));
+            } else {
+                sidecar::debug_log("regen");
+            }
+        }
         let summary = UpdateSummary {
             changed: 0,
             added: 0,
@@ -527,6 +698,35 @@ pub fn update_incremental(opts: &BuildOptions) -> Result<UpdateResult, String> {
         });
     }
 
+    // Non-noop: we need families now. If we came in through the
+    // sidecar fast path, decode the tail from the bytes we already
+    // have; otherwise existing_full already carries them. On tail
+    // decode failure, silently fall back to JSON read.
+    let existing_tail: sidecar::SidecarTail = if let Some(ref full) = existing_full {
+        sidecar::SidecarTail {
+            families: full.families.clone(),
+            ontology_refs: full.ontology_refs.clone(),
+        }
+    } else if let Some(ref bytes) = sidecar_bytes {
+        match sidecar::decode_tail(bytes) {
+            Ok(t) => t,
+            Err(reason) => {
+                sidecar::debug_log(&format!("tail_miss:{}", reason.as_str()));
+                match read(&idx_path) {
+                    Ok(full) => sidecar::SidecarTail {
+                        families: full.families,
+                        ontology_refs: full.ontology_refs,
+                    },
+                    Err(message) => {
+                        return full_rebuild(Some(FallbackReason::IndexUnreadable(message)));
+                    }
+                }
+            }
+        }
+    } else {
+        return full_rebuild(Some(FallbackReason::IndexMissing));
+    };
+
     // Collect preserved members from unchanged + mtime-only files.
     let preserved_paths: BTreeSet<&str> = classifications
         .iter()
@@ -536,7 +736,7 @@ pub fn update_incremental(opts: &BuildOptions) -> Result<UpdateResult, String> {
 
     // (family_id, FamilyMember-without-handle, family tags) accumulator.
     let mut family_map: BTreeMap<String, Family> = BTreeMap::new();
-    for fam in &existing.families {
+    for fam in &existing_tail.families {
         for m in &fam.members {
             if preserved_paths.contains(m.path.as_str()) {
                 let entry = family_map
@@ -635,7 +835,42 @@ pub fn update_incremental(opts: &BuildOptions) -> Result<UpdateResult, String> {
 /// renamed over `<path>`. If serialization or the temp write fails, the
 /// temp file is best-effort removed and the error is propagated; the
 /// existing `<path>` is never partially overwritten.
+///
+/// The binary sidecar cache (`<dir>/index.bincache`, see [`sidecar`]) is
+/// updated in the same call **after** the JSON rename succeeds. The
+/// sidecar is a build artifact, not source of truth, so any failure to
+/// write it is logged via the optional `TAGPATH_SIDECAR_DEBUG` channel
+/// and ignored — the next `--update` cycle will fall back to JSON read
+/// and regenerate the sidecar. JSON is renamed first so a crash between
+/// the two renames leaves JSON authoritative; a stale sidecar that no
+/// longer matches JSON is caught on the next read by the embedded sha256
+/// and falls back cleanly.
+///
+/// Use [`write_json_only`] if a caller deliberately wants to skip the
+/// sidecar (e.g. a test simulating mid-write crash where only the JSON
+/// rename succeeded).
 pub fn write(idx: &Index, path: &Path) -> Result<(), String> {
+    write_json_only(idx, path)?;
+    let side_path = sidecar::sidecar_path_for(path);
+    match sidecar::write(idx, &side_path) {
+        Ok(()) => sidecar::debug_log("write"),
+        Err(e) => {
+            // Best-effort: the JSON is authoritative. Surface only via
+            // the debug channel so production behaviour stays quiet.
+            sidecar::debug_log(&format!("write_failed:{e}"));
+            // Make sure no stale sidecar lingers from a previous run.
+            let _ = std::fs::remove_file(&side_path);
+        }
+    }
+    Ok(())
+}
+
+/// Write only the JSON index; do **not** update the sidecar cache.
+///
+/// Public for the rare cases (tests simulating a half-committed write
+/// pair) that need to bypass the sidecar. Ordinary production callers
+/// should use [`write`] instead.
+pub fn write_json_only(idx: &Index, path: &Path) -> Result<(), String> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)
             .map_err(|e| format!("create_dir_all({}): {e}", parent.display()))?;

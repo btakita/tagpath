@@ -305,10 +305,18 @@ Builds a persistent project snapshot at `.naming/index.json`, alongside the reso
 - `ontology_refs` mirrors the records from `tagpath ontology` — one entry per `.naming/tags/*.md` file, with the canonical `tag`, project-relative `path`, and a `sha256:` hash of the markdown bytes. Sorted by `tag`.
 - `--check`: recomputes the fingerprint and per-source hashes and exits `0` if the on-disk index is still fresh, `1` otherwise. The stale report lists each reason: `index_missing`, `index_unreadable`, `schema_version`, `config_changed`, `tool_version`, `source_added`, `source_removed`, or `source_modified`. `--check` never writes.
 - `--force`: rebuilds even when the on-disk index would still pass a freshness check.
-- `--update`: incrementally updates the on-disk index by reusing cached source entries and re-extracting only files whose content actually changed. Falls back to a full rebuild (with a one-line stderr notice naming the reason) when the on-disk index is missing or unreadable, when the `schema_version` differs from the running binary, or when the resolved `config_fingerprint` differs from the on-disk value. On success, prints a one-line stderr digest: `[tagpath] incremental update: <changed> changed, <added> added, <removed> removed, <unchanged> unchanged (<ms>ms)`. Suppressible via `TAGPATH_QUIET=1`. The result is byte-identical to a full rebuild modulo `generated_at`. Writes are atomic via `.naming/index.json.tmp` → `rename(2)` so an interrupted update never produces a partially-written file.
+- `--update`: incrementally updates the on-disk index by reusing cached source entries and re-extracting only files whose content actually changed. Falls back to a full rebuild (with a one-line stderr notice naming the reason) when the on-disk index is missing or unreadable, when the `schema_version` differs from the running binary, or when the resolved `config_fingerprint` differs from the on-disk value. On success, prints a one-line stderr digest: `[tagpath] incremental update: <changed> changed, <added> added, <removed> removed, <unchanged> unchanged (<ms>ms)`. Suppressible via `TAGPATH_QUIET=1`. The result is byte-identical to a full rebuild modulo `generated_at`. Writes are atomic via `.naming/index.json.tmp` → `rename(2)` so an interrupted update never produces a partially-written file. A binary sidecar cache (`.naming/index.bincache`, see §15.6) is written alongside and consulted on the next `--update` to short-circuit JSON parsing on the no-op fast path.
 - `--update --force-full`: forces a full rebuild but keeps the digest summary format (`[tagpath] full rebuild: <sources> sources, <families> families (<ms>ms)`).
 - `--update --emit jsonl`: streams NDJSON with a leading `{"type":"update_plan","changed":N,"added":N,"removed":N,"unchanged":N}` record before the standard `header` / `source` / `family` / `member` / `footer` records.
 - Without flags, `tagpath index` rebuilds only when stale, otherwise prints `index is already fresh`.
+- **Recommended `.gitignore` snippet:** repos that commit `.naming/index.json` should still ignore the auxiliary build artifacts:
+  ```
+  /target
+  .naming/index.json.tmp
+  .naming/index.bincache
+  .naming/index.bincache.tmp
+  ```
+  The `.bincache` sidecar is a per-machine cache; never commit it.
 
 ### 9.14 search --index
 
@@ -723,3 +731,34 @@ preserves the prior on-disk behavior verbatim.
 - When the on-disk schema is older than what your consumer compiled
   against, treat `schema_changed` as a silent rebuild trigger; only
   surface `schema_version` as a hard error.
+
+### 15.6 Sidecar cache (`.naming/index.bincache`)
+
+Tagpath writes an auxiliary binary file `.naming/index.bincache`
+alongside the canonical `.naming/index.json`. It is a bincode-encoded
+copy of the same `Index` payload, split into a small "head" section
+(schema + config + sources) and a larger "tail" section (families +
+ontology refs) so the no-op fast path can decode only the head.
+
+**Consumers must not depend on this file.** It is a tagpath-internal
+build artifact, not part of the wire contract:
+
+- Format details (magic bytes, framing, bincode version) may change
+  without notice across tagpath patch releases. Read `.naming/index.json`
+  if you need a stable shape.
+- Tagpath verifies the sidecar's integrity (sha256 of each section
+  against the framed header, schema-version baked into the wrapper) on
+  every read. On any mismatch — missing, corrupt, schema skew, wrapper
+  version skew — tagpath silently falls back to JSON read and
+  regenerates the sidecar.
+- The sidecar is renamed *after* the JSON rename. A mid-write crash
+  between the two renames leaves the JSON authoritative and the
+  sidecar absent or stale; the next `--update` cycle detects this via
+  the integrity check and recovers without surfacing an error.
+- Cloning a repo without the sidecar is fine; the first `--update`
+  rebuilds it from the JSON.
+
+Performance contract: on a 1000-source synthetic repo, the sidecar
+fast path takes `--update` no-op cycles to ~1-3 ms (vs ~100-180 ms
+for a full rebuild) — roughly 50× faster, comfortably past the ≥10×
+bar the sidecar was introduced to hit.

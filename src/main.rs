@@ -865,7 +865,18 @@ fn cmd_index_update(
             summary,
         }
     } else {
-        match index::update_incremental(&opts) {
+        // Bare `tagpath index --update` only consults the summary
+        // (digest + skip-write decision); the returned `Index` is
+        // discarded on no-op. Hand `LazyTail` to skip the bincode
+        // decode of ~15k families on a true no-op cycle. The NDJSON
+        // path below still needs the full Index, so emit_jsonl forces
+        // the Full shape.
+        let shape = if emit_jsonl {
+            index::IndexShape::Full
+        } else {
+            index::IndexShape::LazyTail
+        };
+        match index::update_incremental_with(&opts, shape) {
             Ok(r) => r,
             Err(e) => {
                 eprintln!("error: {e}");

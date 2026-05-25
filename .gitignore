@@ -1,2 +1,4 @@
 /target
 .agent-doc/
+.naming/index.bincache
+.naming/index.bincache.tmp

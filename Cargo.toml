@@ -1,6 +1,6 @@
 [package]
 name = "tagpath"
-version = "0.12.0"
+version = "0.13.0"
 edition = "2024"
 description = "Tag Path — parse, lint, and search tag-based identifiers across languages"
 license = "MIT"
@@ -43,6 +43,7 @@ clap = { version = "4", features = ["derive"] }
 regex = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+bincode = { version = "2", features = ["serde"] }
 toml = "0.8"
 tree-sitter = { version = "0.26", optional = true }
 tree-sitter-rust = { version = "0.24", optional = true }
