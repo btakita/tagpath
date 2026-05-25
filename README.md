@@ -352,6 +352,35 @@ console.log(search_over_rows("user", rows));
 See `SPEC.md` § 13 for the exposed surface and the no-filesystem rule for
 `search_over_rows`.
 
+### npm: `@btakita/tagpath-wasm`
+
+The wasm-pack output is published to npm as a single package with three
+target-specific entry points:
+
+```sh
+npm install @btakita/tagpath-wasm
+```
+
+Node:
+
+```js
+import { parse, alias, prose, normalize_query, search_over_rows }
+  from "@btakita/tagpath-wasm/nodejs";
+
+console.log(parse("createUserProfile"));
+```
+
+Bundler (webpack/vite) or browser-direct — the default export auto-selects:
+
+```js
+import { parse } from "@btakita/tagpath-wasm";
+// explicit subpaths: "@btakita/tagpath-wasm/bundler", "/web", "/nodejs"
+```
+
+Build locally with `scripts/build-wasm.sh` (requires `wasm-pack`). The script
+produces a publishable `pkg/` directory and `pkg-smoke/smoke.mjs` exercises
+every binding against it.
+
 ## Advanced: dynamic tree-sitter grammars
 
 Tagpath can load tree-sitter grammars from compiled shared libraries at

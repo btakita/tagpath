@@ -2,3 +2,8 @@
 .agent-doc/
 .naming/index.bincache
 .naming/index.bincache.tmp
+/pkg
+/pkg-bundler
+/pkg-nodejs
+/pkg-web
+/pkg-smoke/node_modules

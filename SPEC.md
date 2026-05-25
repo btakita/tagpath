@@ -460,6 +460,47 @@ wasm-pack build --target nodejs --no-default-features --features wasm
 The `[lib] crate-type = ["cdylib", "rlib"]` setting is required so `wasm-pack`
 can emit a cdylib alongside the regular rlib used by native consumers.
 
+### 13.5 Publish flow (`@btakita/tagpath-wasm`)
+
+The wasm-pack output ships to npm as a single package, `@btakita/tagpath-wasm`,
+with three target-specific entry points so the same install works across Node,
+bundlers (webpack/vite), and direct browser usage.
+
+**Build script:** `scripts/build-wasm.sh` runs `wasm-pack build` three times
+against the `wasm` feature set, then merges the outputs into a single `pkg/`:
+
+```
+pkg/
+  package.json         single, with "exports" map routing per consumer
+  README.md            copied from repo root
+  LICENSE-MIT          copied from repo root if present
+  tagpath.d.ts         merged type defs (named after [lib].name = "tagpath")
+  bundler/             output from `wasm-pack build --target bundler`
+  nodejs/              output from `wasm-pack build --target nodejs`
+  web/                 output from `wasm-pack build --target web`
+```
+
+The `package.json` `name` and `version` are derived from `Cargo.toml` on every
+run so the npm version always tracks the crate version. The `exports` map:
+
+| Consumer        | Subpath              | File                          |
+|-----------------|----------------------|-------------------------------|
+| Node ESM        | `@btakita/tagpath-wasm` | `./nodejs/tagpath.js`  |
+| Browser direct  | `@btakita/tagpath-wasm` | `./web/tagpath.js`     |
+| Bundler default | `@btakita/tagpath-wasm` | `./bundler/tagpath.js` |
+| Explicit        | `@btakita/tagpath-wasm/nodejs` / `/web` / `/bundler` | matching shim |
+
+**Smoke test:** `pkg-smoke/smoke.mjs` imports the Node entry via a relative
+path (`../pkg/nodejs/tagpath.js`) and exercises every wasm binding
+(`parse`, `alias`, `prose`, `normalize_query`, `search_over_rows`). The CI
+workflow `.github/workflows/wasm-build.yml` runs the build script and the
+smoke test on every push and PR to `main`, then uploads `pkg/` as a workflow
+artifact.
+
+**Manual publish gate:** npm publish is **not** automated. After the CI build
+goes green, `npm publish` is run manually after `npm login`. The build path
+itself is proven by CI; the publish step is a human decision.
+
 ## 14. Dynamic grammar loading
 
 Tagpath can load tree-sitter grammars from compiled shared libraries

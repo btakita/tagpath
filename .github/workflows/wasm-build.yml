@@ -1,0 +1,37 @@
+name: WASM build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-wasm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install wasm-pack
+        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+
+      - name: Build @btakita/tagpath-wasm
+        run: ./scripts/build-wasm.sh
+
+      - name: Run Node smoke test
+        run: node pkg-smoke/smoke.mjs
+
+      - name: Upload pkg/ artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tagpath-wasm-pkg
+          path: pkg/
+          if-no-files-found: error
