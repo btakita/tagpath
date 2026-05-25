@@ -857,3 +857,113 @@ inside the agent-doc `finalize` step. The
 `agent-doc/malformed-attr` rule fires on this form so the failure
 surfaces at lint time, before the directive can reach `finalize`.
 
+## 17. Watch mode
+
+`tagpath watch [<path>]` is a long-running process that observes
+filesystem changes in a project rooted at `<path>` (defaults to the
+current directory) and emits newline-delimited JSON events on stdout.
+Consumers — tsift, agent-doc editor surfaces, ad-hoc `tail -f | jq`
+pipelines — read the stream to react in real time without polling
+`tagpath index --update`.
+
+The feature is gated behind the default-on `watch` Cargo feature and
+is native-only (`#[cfg(all(feature = "watch", not(target_arch =
+"wasm32")))]`). WASM builds and `--no-default-features` builds stay
+clean.
+
+### 17.1 Wire format (stdout)
+
+Stdout is machine-only: every line is exactly one JSON object
+terminated by `\n`. Stderr carries human-readable status
+(`[tagpath watch] reindexed N files in Mms`); `TAGPATH_QUIET=1`
+suppresses stderr.
+
+The first line is always `hello`:
+
+```json
+{"type":"hello","schema_version":1,"tool_version":"0.15.0","project_root":"/abs/path","index_schema_version":2,"watcher":"notify-6"}
+```
+
+- `schema_version` versions the watch wire format itself
+  (`watch::WATCH_SCHEMA_VERSION`).
+- `index_schema_version` mirrors the on-disk index schema
+  (`index::SCHEMA_VERSION`).
+- `watcher` documents the backend (`notify-6` for the v6 notify crate).
+
+Subsequent event types:
+
+| `type`          | Fields                                                                                                                                                                                                         |
+| --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ready`         | none — initial reindex done, watcher armed.                                                                                                                                                                     |
+| `index_update`  | `summary.{changed,added,removed,unchanged,elapsed_ms}` and `changed_handles` (sorted unique union of added + removed `fam:…`/`mem:…` handles, computed by diffing the new index against the previous snapshot). |
+| `lint_finding`  | `dialect`, `path`, `line`, `col`, `rule`, `severity`, `message`, `fix_hint`. Emitted per finding when a changed `.md` file contains the agent-doc trigger string.                                                |
+| `error`         | `stage` (`index_update`, `lint`, `watcher`), `reason`. Non-fatal; watcher stays alive.                                                                                                                          |
+| `shutdown`      | `reason` (`sigint`, `sigterm`, …). Final line before exit.                                                                                                                                                      |
+
+`--emit-shape compact` drops `changed_handles` and most `lint_finding`
+detail (keeps `type`, `rule`, `path`) so consumers that only need a
+heartbeat can save bytes. Default is `full`.
+
+### 17.2 Debounce + ignore rules
+
+Filesystem events are coalesced inside a sliding **150 ms** quiet
+window before a reindex pass fires (`watch::DEFAULT_DEBOUNCE_MS`).
+The window catches the typical editor "atomic save" burst (rename +
+chmod + content) and the noisy `inotify` fanout from build tools.
+
+The watcher ignores any path whose components include `.naming`,
+`.git`, `target`, `node_modules`, `__pycache__`, `.venv`, or `vendor`
+— the same set used by `extract::list_source_files`. The `.naming`
+exclusion is load-bearing: it prevents the watcher firing on its own
+`.naming/index.json` writes.
+
+Lint runs only on `.md` files in the changed batch that pass the
+`looks_like_agent_doc` content check.
+
+### 17.3 Single-instance lock
+
+On start, the watcher writes its PID to `.naming/watch.pid`. If the
+file already exists and names a live process, the second `tagpath
+watch` invocation exits 1 with a clear stderr message. On clean
+shutdown (any path that returns from `watch::run`) the lockfile is
+removed; the RAII `PidLock` guard guarantees this even on panic.
+
+On non-unix targets the liveness check is conservative — a stale
+lockfile from a crashed previous run must be removed manually.
+
+### 17.4 Signal handling
+
+`SIGINT` and `SIGTERM` are caught via `sigaction`. An async-signal-safe
+handler sets a process-wide atomic; a tiny watcher thread translates
+that into the shared shutdown flag and emits the `shutdown` event from
+the main loop before returning. The watcher targets exit-within-250 ms
+after receiving a signal.
+
+### 17.5 CLI surface
+
+- `tagpath watch [<path>]` — start the long-running watcher.
+- `tagpath watch --once` — perform one reindex + lint pass, emit the
+  events, exit. Useful for editor save hooks.
+- `tagpath watch --no-lint` — skip the agent-doc lint pass.
+- `tagpath watch --emit-shape full|compact` — output verbosity knob.
+
+### 17.6 Recommended consumer pattern
+
+Consumers should use line-buffered stdout reads and a structured
+event dispatch keyed on `type`:
+
+```bash
+tagpath watch &
+tail -f /dev/null | tagpath watch | while IFS= read -r line; do
+  case "$(echo "$line" | jq -r .type)" in
+    index_update) echo "reindex: $line" ;;
+    lint_finding) echo "lint: $line" ;;
+  esac
+done
+```
+
+For long-lived agent integrations, treat `hello` as the schema-
+negotiation handshake, persist the `project_root` + `tool_version` for
+log correlation, and reset any local handle cache when
+`schema_version` differs from the last-seen value.
+

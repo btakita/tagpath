@@ -21,6 +21,8 @@ pub mod query;
 pub mod search;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod treesitter;
+#[cfg(all(feature = "watch", not(target_arch = "wasm32")))]
+pub mod watch;
 
 #[cfg(target_arch = "wasm32")]
 pub mod wasm;

@@ -165,6 +165,13 @@ Wire it into a Claude Desktop MCP config (`~/Library/Application Support/Claude/
 - **Tag ontology** — load `.naming/tags/*.md` domain tags and validate them against `.naming.toml`
 - **Tag graph** — co-occurrence graph of tag relationships across a codebase (petgraph, DOT/JSON output)
 - **Persistent index** — `tagpath index` snapshots sources, families, ontology refs, and a config fingerprint to `.naming/index.json` for cheap freshness checks (`--check`) and fast indexed search (`search --index`)
+- **Live watcher** — `tagpath watch` emits NDJSON filesystem events on stdout (`hello`, `index_update`, `lint_finding`, `shutdown`) so tsift, agent-doc editor surfaces, and ad-hoc shell pipelines can react in real time without polling. See [SPEC.md §17](SPEC.md) for the wire format.
+
+```bash
+# Start the watcher and grep for lint findings as they happen.
+tagpath watch &
+tagpath watch | jq -c 'select(.type == "lint_finding")'
+```
 
 ## Language Presets
 

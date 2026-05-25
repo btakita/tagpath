@@ -1,6 +1,6 @@
 [package]
 name = "tagpath"
-version = "0.14.0"
+version = "0.15.0"
 edition = "2024"
 description = "Tag Path — parse, lint, and search tag-based identifiers across languages"
 license = "MIT"
@@ -17,10 +17,13 @@ path = "src/main.rs"
 required-features = ["treesitter"]
 
 [features]
-default = ["lang-rust", "lang-python", "lang-javascript", "lang-typescript", "lang-go", "lang-c", "lang-cpp", "lang-java", "lang-ruby", "lang-php", "lang-csharp", "lang-swift", "lang-kotlin", "mcp"]
+default = ["lang-rust", "lang-python", "lang-javascript", "lang-typescript", "lang-go", "lang-c", "lang-cpp", "lang-java", "lang-ruby", "lang-php", "lang-csharp", "lang-swift", "lang-kotlin", "mcp", "watch"]
 mcp = []
 wasm = ["dep:wasm-bindgen", "dep:serde-wasm-bindgen", "dep:js-sys"]
 treesitter = ["dep:tree-sitter"]
+# Filesystem-watching NDJSON stream (`tagpath watch`). Native-only; not
+# available on wasm builds.
+watch = ["dep:notify", "dep:libc"]
 lang-rust = ["treesitter", "dep:tree-sitter-rust"]
 lang-python = ["treesitter", "dep:tree-sitter-python"]
 lang-javascript = ["treesitter", "dep:tree-sitter-javascript"]
@@ -68,3 +71,5 @@ js-sys = { version = "0.3", optional = true }
 libloading = { version = "0.8", optional = true }
 tree-sitter-language = { version = "0.1", optional = true }
 dirs = { version = "5", optional = true }
+notify = { version = "6", optional = true }
+libc = { version = "0.2", optional = true }

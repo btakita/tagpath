@@ -173,6 +173,21 @@ enum Commands {
         #[command(subcommand)]
         action: GrammarsAction,
     },
+    /// Watch a project for filesystem changes and emit NDJSON events on stdout
+    Watch {
+        /// Project path (defaults to current directory)
+        #[arg(default_value = ".")]
+        path: PathBuf,
+        /// Perform a single reindex + lint pass, emit the events, exit.
+        #[arg(long)]
+        once: bool,
+        /// Skip the agent-doc lint pass on changed `.md` files.
+        #[arg(long = "no-lint")]
+        no_lint: bool,
+        /// Output shape: `full` (default) or `compact`.
+        #[arg(long = "emit-shape", default_value = "full")]
+        emit_shape: String,
+    },
     /// Build a tag co-occurrence graph from extracted identifiers
     Graph {
         /// Path to scan (file or directory)
@@ -267,7 +282,53 @@ fn main() {
         } => cmd_graph(&path, &format, query.as_deref()),
         Commands::Mcp => cmd_mcp(),
         Commands::Grammars { action } => cmd_grammars(action),
+        Commands::Watch {
+            path,
+            once,
+            no_lint,
+            emit_shape,
+        } => cmd_watch(&path, once, no_lint, &emit_shape),
     }
+}
+
+#[cfg(feature = "watch")]
+fn cmd_watch(path: &std::path::Path, once: bool, no_lint: bool, emit_shape: &str) {
+    use tagpath::watch::{self, EmitShape, WatchMode, WatchOptions};
+    let project_root = match index::find_project_root(path) {
+        Some(root) => root,
+        None => {
+            eprintln!(
+                "error: no .naming.toml found (searched from {} upward); run `tagpath init`",
+                path.display()
+            );
+            std::process::exit(1);
+        }
+    };
+    let shape = match EmitShape::parse(emit_shape) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("error: {e}");
+            std::process::exit(2);
+        }
+    };
+    let mut opts = WatchOptions::new(project_root);
+    opts.mode = if once {
+        WatchMode::Once
+    } else {
+        WatchMode::Continuous
+    };
+    opts.run_lint = !no_lint;
+    opts.emit_shape = shape;
+    opts.quiet = std::env::var_os("TAGPATH_QUIET").is_some();
+    let code = watch::run(opts);
+    std::process::exit(code);
+}
+
+#[cfg(not(feature = "watch"))]
+fn cmd_watch(_path: &std::path::Path, _once: bool, _no_lint: bool, _emit_shape: &str) {
+    eprintln!("error: tagpath was built without the `watch` feature");
+    eprintln!("hint: rebuild with `cargo build --features watch`");
+    std::process::exit(1);
 }
 
 #[cfg(feature = "mcp")]
