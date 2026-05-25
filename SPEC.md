@@ -170,6 +170,7 @@ tagpath ontology [<PATH>] [--format text|json]
 tagpath graph [<PATH>] [--format text|dot|json] [--query <QUERY>]
 tagpath index [<PATH>] [--check] [--force] [--emit json|jsonl] [--schema-version]
 tagpath search <QUERY> <PATH> [--index]
+tagpath rename <OLD> <NEW> [<PATH>] [--dry-run] [--format text|json]
 ```
 
 ### 9.1 parse
@@ -325,6 +326,17 @@ When `--index` is passed, `tagpath search` reads `.naming/index.json` instead of
 - Tagpath first locates the project root by walking up for `.naming.toml`, then expects the index at `<root>/.naming/index.json`.
 - The index is freshness-checked before use. If it is missing, unreadable, or stale (config fingerprint mismatch, schema mismatch, or any source added/removed/modified), `tagpath search --index` exits `2` with a clear error telling the user to run `tagpath index`.
 - When the index is fresh, results come directly from the persisted families (no rescanning). Match semantics are identical to live search: every query tag must appear in the family's tag list.
+
+### 9.15 rename
+
+`tagpath rename <OLD> <NEW> [<PATH>]` performs an index-backed family rename. `<OLD>` may be any member spelling from the indexed family; `<NEW>` is parsed into tags and rendered in each member's original convention.
+
+- Tagpath locates the project root by walking up for `.naming.toml`, loads or refreshes `.naming/index.json`, and finds the family whose canonical tags match `<OLD>`.
+- Every indexed family member contributes a source-local rewrite pair. For example, renaming `create_user_profile` to `update_account_record` rewrites `create_user_profile`, `createUserProfile`, `CreateUserProfile`, `create-user-profile`, `CREATE_USER_PROFILE`, and `Create_User_Profile` to the corresponding new spelling.
+- Rewrites are token-boundary aware and are applied in-place to project source files. Substrings inside longer identifiers are not rewritten.
+- After a successful non-dry-run rename, Tagpath rebuilds `.naming/index.json` and its sidecar so subsequent indexed queries see the new family.
+- `--dry-run` prints the same text or JSON report without writing source files or index artifacts.
+- `--format json` emits `{ project_root, old, new, old_family_id, new_family_id, dry_run, files_changed, replacements, edits }`, where each edit records `{ path, old, new, replacements }`.
 
 ## 10. MCP Server
 
@@ -1055,4 +1067,3 @@ For long-lived agent integrations, treat `hello` as the schema-
 negotiation handshake, persist the `project_root` + `tool_version` for
 log correlation, and reset any local handle cache when
 `schema_version` differs from the last-seen value.
-

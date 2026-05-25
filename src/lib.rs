@@ -18,6 +18,8 @@ pub mod parser;
 pub mod prose;
 pub mod query;
 #[cfg(not(target_arch = "wasm32"))]
+pub mod rename;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod search;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod treesitter;

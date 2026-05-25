@@ -5,7 +5,7 @@ use std::{
 };
 use tagpath::{
     alias, compression, config, extract, family, graph, index, lint, ontology, parser, prose,
-    query, search,
+    query, rename as rename_mod, search,
 };
 
 #[derive(Parser)]
@@ -81,6 +81,22 @@ enum Commands {
         /// Read from the persisted .naming/index.json instead of rescanning
         #[arg(long)]
         index: bool,
+    },
+    /// Rename an indexed tag family across files and naming conventions
+    Rename {
+        /// Existing identifier or family member to rename
+        old: String,
+        /// Replacement identifier; its tags are rendered per source convention
+        new: String,
+        /// Project path (defaults to current directory)
+        #[arg(default_value = ".")]
+        path: PathBuf,
+        /// Print the rename plan without writing source files or the index
+        #[arg(long)]
+        dry_run: bool,
+        /// Output format (text, json)
+        #[arg(short, long, default_value = "text")]
+        format: String,
     },
     /// Build, check, or rebuild the persistent project index (.naming/index.json)
     Index {
@@ -287,6 +303,13 @@ fn main() {
             format,
             index,
         } => cmd_search(&query, &path, &format, index),
+        Commands::Rename {
+            old,
+            new,
+            path,
+            dry_run,
+            format,
+        } => cmd_rename(&old, &new, &path, dry_run, &format),
         Commands::Index {
             path,
             check,
@@ -1103,6 +1126,46 @@ fn cmd_search_index(query: &str, path: &std::path::Path, format: &str) {
                     hit.path, hit.line, hit.name, hit.convention,
                 );
             }
+        }
+    }
+}
+
+fn cmd_rename(old: &str, new: &str, path: &std::path::Path, dry_run: bool, format: &str) {
+    let report = match rename_mod::rename_family(&rename_mod::RenameOptions {
+        path: path.to_path_buf(),
+        old: old.to_string(),
+        new: new.to_string(),
+        dry_run,
+    }) {
+        Ok(report) => report,
+        Err(e) => {
+            eprintln!("error: {e}");
+            std::process::exit(1);
+        }
+    };
+
+    match format {
+        "json" => println!("{}", serde_json::to_string_pretty(&report).unwrap()),
+        "text" => {
+            for edit in &report.edits {
+                println!(
+                    "{}:\t{} -> {}\t{} replacements",
+                    edit.path, edit.old, edit.new, edit.replacements
+                );
+            }
+            let action = if report.dry_run {
+                "would rename"
+            } else {
+                "renamed"
+            };
+            println!(
+                "{action} {} occurrences across {} files ({} -> {})",
+                report.replacements, report.files_changed, report.old, report.new
+            );
+        }
+        other => {
+            eprintln!("error: unknown --format value `{other}` (expected `text` or `json`)");
+            std::process::exit(2);
         }
     }
 }

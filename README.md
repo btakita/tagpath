@@ -107,6 +107,7 @@ tagpath index --check                  # exit 0 if fresh, 1 if stale
 tagpath index --force                  # rebuild even when fresh
 tagpath index --update                 # incremental update — re-extract only files that changed
 tagpath search "user" . --index        # query the persisted index instead of rescanning
+tagpath rename create_user update_user # rewrite the indexed family across conventions
 
 # Initialize a .naming.toml
 tagpath init --lang typescript
