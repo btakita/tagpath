@@ -24,6 +24,8 @@ pub struct NamingConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub packages: Option<PackageConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub lint: Option<LintConfig>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub contexts: Option<HashMap<String, ContextConfig>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tags: Option<TagConfig>,
@@ -135,6 +137,12 @@ pub struct PackageConfig {
     pub separator: String,
     #[serde(default)]
     pub pattern: String,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct LintConfig {
+    #[serde(default)]
+    pub allow_mixed_within_identifier: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -286,6 +294,7 @@ fn empty_config() -> NamingConfig {
         patterns: None,
         externals: None,
         packages: None,
+        lint: None,
         contexts: None,
         tags: None,
         grammars: None,
@@ -319,6 +328,9 @@ fn merge_into(target: &mut NamingConfig, source: &NamingConfig) {
     }
     if source.packages.is_some() {
         target.packages = source.packages.clone();
+    }
+    if source.lint.is_some() {
+        target.lint = source.lint.clone();
     }
     if let Some(ref src_contexts) = source.contexts {
         let tgt = target.contexts.get_or_insert_with(HashMap::new);

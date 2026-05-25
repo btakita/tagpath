@@ -49,6 +49,10 @@ pub fn lint(path: &Path, config: &NamingConfig) -> Vec<LintViolation> {
         Some(c) => c,
         None => return vec![], // No context rules = no violations
     };
+    let allow_mixed_within_identifier = config
+        .lint
+        .as_ref()
+        .is_some_and(|lint| lint.allow_mixed_within_identifier);
     let mut violations = Vec::new();
     for ident in &identifiers {
         let ctx = match &ident.context {
@@ -77,6 +81,15 @@ pub fn lint(path: &Path, config: &NamingConfig) -> Vec<LintViolation> {
         };
         let actual = parser::detect_convention(&ident.identifier);
         if actual != expected {
+            if allow_mixed_within_identifier
+                && mixed_identifier_matches_expected_tags(
+                    &ident.identifier,
+                    &ident.parsed.tags,
+                    expected,
+                )
+            {
+                continue;
+            }
             let suggested = parser::join_tags(&ident.parsed.tags, expected);
             violations.push(LintViolation {
                 file: ident.file.clone(),
@@ -92,17 +105,57 @@ pub fn lint(path: &Path, config: &NamingConfig) -> Vec<LintViolation> {
     violations
 }
 
+fn mixed_identifier_matches_expected_tags(
+    identifier: &str,
+    detected_tags: &[String],
+    expected: Convention,
+) -> bool {
+    if !has_mixed_surface(identifier) {
+        return false;
+    }
+    parser::parse(identifier, expected).tags == detected_tags
+}
+
+fn has_mixed_surface(identifier: &str) -> bool {
+    let has_separator = identifier.contains('_') || identifier.contains('-');
+    has_separator && identifier.split(['_', '-']).any(segment_has_camel_boundary)
+}
+
+fn segment_has_camel_boundary(segment: &str) -> bool {
+    let chars: Vec<char> = segment.chars().collect();
+    for i in 0..chars.len() {
+        let c = chars[i];
+        if !c.is_uppercase() || i == 0 {
+            continue;
+        }
+        let prev_lower = chars[i - 1].is_lowercase();
+        let next_lower = i + 1 < chars.len() && chars[i + 1].is_lowercase();
+        if prev_lower || (i > 1 && next_lower) {
+            return true;
+        }
+    }
+    false
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     #[cfg(feature = "lang-rust")]
-    use crate::config::ContextConfig;
+    use crate::config::{ContextConfig, LintConfig};
     #[cfg(feature = "lang-rust")]
     use std::collections::HashMap;
     use std::io::Write;
 
     #[cfg(feature = "lang-rust")]
     fn make_config(contexts: Vec<(&str, &str)>) -> NamingConfig {
+        make_config_with_lint(contexts, None)
+    }
+
+    #[cfg(feature = "lang-rust")]
+    fn make_config_with_lint(
+        contexts: Vec<(&str, &str)>,
+        lint: Option<LintConfig>,
+    ) -> NamingConfig {
         let mut ctx_map = HashMap::new();
         for (name, convention) in contexts {
             ctx_map.insert(
@@ -125,6 +178,7 @@ mod tests {
             patterns: None,
             externals: None,
             packages: None,
+            lint,
             contexts: Some(ctx_map),
             tags: None,
             grammars: None,
@@ -265,6 +319,78 @@ mod tests {
             .find(|v| v.identifier == "user_service")
             .unwrap();
         assert_eq!(violation.suggested_fix, Some("UserService".to_string()));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[cfg(feature = "lang-rust")]
+    #[test]
+    fn test_lint_allows_mixed_identifier_when_tags_match_expected_context() {
+        let dir = std::env::temp_dir().join("tagpath_test_lint_mixed_allowed");
+        let _ = std::fs::create_dir_all(&dir);
+        let file = dir.join("mixed.rs");
+        {
+            let mut f = std::fs::File::create(&file).unwrap();
+            writeln!(f, "fn createUserProfile_v2() {{}}").unwrap();
+        }
+        let config = make_config_with_lint(
+            vec![("function", "camelCase")],
+            Some(LintConfig {
+                allow_mixed_within_identifier: true,
+            }),
+        );
+        let violations = lint(&file, &config);
+        assert!(
+            violations.is_empty(),
+            "Expected mixed identifier to be tolerated, got: {:?}",
+            violations.iter().map(|v| &v.identifier).collect::<Vec<_>>()
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[cfg(feature = "lang-rust")]
+    #[test]
+    fn test_lint_flags_mixed_identifier_without_policy() {
+        let dir = std::env::temp_dir().join("tagpath_test_lint_mixed_default");
+        let _ = std::fs::create_dir_all(&dir);
+        let file = dir.join("mixed.rs");
+        {
+            let mut f = std::fs::File::create(&file).unwrap();
+            writeln!(f, "fn createUserProfile_v2() {{}}").unwrap();
+        }
+        let config = make_config(vec![("function", "camelCase")]);
+        let violations = lint(&file, &config);
+        let violation = violations
+            .iter()
+            .find(|v| v.identifier == "createUserProfile_v2")
+            .expect("mixed identifier should be flagged by default");
+        assert_eq!(
+            violation.suggested_fix,
+            Some("createUserProfileV2".to_string())
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[cfg(feature = "lang-rust")]
+    #[test]
+    fn test_lint_mixed_policy_does_not_allow_plain_wrong_convention() {
+        let dir = std::env::temp_dir().join("tagpath_test_lint_mixed_plain_wrong");
+        let _ = std::fs::create_dir_all(&dir);
+        let file = dir.join("bad.rs");
+        {
+            let mut f = std::fs::File::create(&file).unwrap();
+            writeln!(f, "fn ParseName() {{}}").unwrap();
+        }
+        let config = make_config_with_lint(
+            vec![("function", "snake_case")],
+            Some(LintConfig {
+                allow_mixed_within_identifier: true,
+            }),
+        );
+        let violations = lint(&file, &config);
+        assert!(
+            violations.iter().any(|v| v.identifier == "ParseName"),
+            "plain PascalCase should still be flagged under snake_case"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

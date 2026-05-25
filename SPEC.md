@@ -134,6 +134,9 @@ join_with = "<string>"     # How to join external names
 separator = "<string>"    # Package name separator
 pattern = "<template>"    # Package naming template
 
+[lint]
+allow_mixed_within_identifier = <bool>  # Compare mixed-surface identifiers by tag equivalence
+
 [contexts.<context_name>]
 convention = "<string>"   # Convention for this context
 prefix = "<string>"       # Optional prefix

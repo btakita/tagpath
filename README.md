@@ -248,6 +248,9 @@ factory = "create_{name}"
 hook = "use_{name}"
 setter = "set_{name}"
 
+[lint]
+allow_mixed_within_identifier = true
+
 [tags]
 open = true
 ```
