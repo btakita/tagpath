@@ -10,7 +10,7 @@ use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use crate::{config, extract, lint, ontology, parser};
 
@@ -233,7 +233,408 @@ pub fn build(opts: &BuildOptions) -> Result<Index, String> {
     })
 }
 
+/// Why an incremental update fell back to a full rebuild, if at all.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum FallbackReason {
+    /// `.naming/index.json` does not exist.
+    IndexMissing,
+    /// On-disk index could not be parsed.
+    IndexUnreadable(String),
+    /// On-disk `schema_version` differs from the current binary.
+    SchemaVersionMismatch { found: u32, expected: u32 },
+    /// Resolved config fingerprint changed since the last build.
+    ConfigFingerprintMismatch,
+}
+
+impl FallbackReason {
+    /// Short human-readable reason suitable for stderr.
+    pub fn as_str(&self) -> String {
+        match self {
+            FallbackReason::IndexMissing => "index missing".to_string(),
+            FallbackReason::IndexUnreadable(m) => format!("index unreadable: {m}"),
+            FallbackReason::SchemaVersionMismatch { found, expected } => {
+                format!("schema_version mismatch (found {found}, expected {expected})")
+            }
+            FallbackReason::ConfigFingerprintMismatch => "config_fingerprint mismatch".to_string(),
+        }
+    }
+}
+
+/// Per-source classification produced by [`update_incremental`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SourceChange {
+    /// File present in old index, mtime+size matched → entry copied through.
+    Unchanged,
+    /// File present in old index, mtime/size changed but the rehashed
+    /// content matches → mtime updated, no re-extraction.
+    MtimeOnly,
+    /// File present in old index but content hash differs → re-extracted.
+    Changed,
+    /// File not present in old index → extracted fresh.
+    Added,
+}
+
+/// Summary of an incremental update, used to format the stderr digest.
+#[derive(Debug, Clone)]
+pub struct UpdateSummary {
+    pub changed: usize,
+    pub added: usize,
+    pub removed: usize,
+    pub unchanged: usize,
+    pub elapsed_ms: u128,
+    /// `Some(_)` if the update fell back to a full rebuild, `None` otherwise.
+    pub fallback: Option<FallbackReason>,
+}
+
+impl UpdateSummary {
+    /// True when the update produced no concrete file mutations: every
+    /// source was either `Unchanged` or `MtimeOnly` and nothing was added
+    /// or removed. Callers can use this to skip the JSON re-serialize +
+    /// rename(2) round-trip; the existing on-disk index is already
+    /// byte-equivalent to the recomputed in-memory result modulo
+    /// `generated_at`.
+    pub fn is_noop(&self) -> bool {
+        self.fallback.is_none() && self.changed == 0 && self.added == 0 && self.removed == 0
+    }
+
+    /// Pre-extraction snapshot of the update plan: counts of files in each
+    /// `SourceChange` bucket. Emitted as the JSONL `update_plan` record.
+    pub fn plan_line(&self) -> serde_json::Value {
+        serde_json::json!({
+            "type": "update_plan",
+            "changed": self.changed,
+            "added": self.added,
+            "removed": self.removed,
+            "unchanged": self.unchanged,
+        })
+    }
+}
+
+/// Format the one-line stderr digest emitted after a successful incremental
+/// update. Format:
+/// `[tagpath] incremental update: 1 changed, 0 added, 0 removed, 998 unchanged (12ms)`
+pub fn format_update_digest(summary: &UpdateSummary) -> String {
+    format!(
+        "[tagpath] incremental update: {} changed, {} added, {} removed, {} unchanged ({}ms)",
+        summary.changed, summary.added, summary.removed, summary.unchanged, summary.elapsed_ms
+    )
+}
+
+/// Format the one-line stderr digest emitted after a full rebuild that was
+/// triggered through the `--update` entrypoint (either by user flag or
+/// fallback). Mirrors [`format_update_digest`] so consumers can parse one
+/// shape regardless of code path.
+pub fn format_full_rebuild_digest(idx: &Index, elapsed_ms: u128) -> String {
+    format!(
+        "[tagpath] full rebuild: {} sources, {} families ({}ms)",
+        idx.sources.len(),
+        idx.families.len(),
+        elapsed_ms
+    )
+}
+
+/// Result of [`update_incremental`].
+#[derive(Debug, Clone)]
+pub struct UpdateResult {
+    pub index: Index,
+    pub summary: UpdateSummary,
+}
+
+/// Incrementally update an on-disk index by reusing cached source entries
+/// and re-extracting only the files whose content actually changed.
+///
+/// Falls back to a full rebuild — and returns the same shape — if any of
+/// the guards trip:
+///
+/// - `.naming/index.json` is missing or unreadable
+/// - on-disk `schema_version` differs from the current binary
+/// - resolved `config_fingerprint` differs from the on-disk value
+///
+/// When fallback fires, `summary.fallback` is `Some(_)` and `summary.changed
+/// / added / removed / unchanged` reflect the file counts of the rebuilt
+/// index (added = sources, the rest zero) so the digest stays meaningful.
+pub fn update_incremental(opts: &BuildOptions) -> Result<UpdateResult, String> {
+    let started = Instant::now();
+    let project_root = &opts.project_root;
+    let idx_path = index_path(project_root);
+
+    // Fallback path: full rebuild + tag summary with fallback reason.
+    let full_rebuild = |reason: Option<FallbackReason>| -> Result<UpdateResult, String> {
+        let idx = build(opts)?;
+        let elapsed_ms = started.elapsed().as_millis();
+        let summary = UpdateSummary {
+            changed: 0,
+            added: idx.sources.len(),
+            removed: 0,
+            unchanged: 0,
+            elapsed_ms,
+            fallback: reason,
+        };
+        Ok(UpdateResult {
+            index: idx,
+            summary,
+        })
+    };
+
+    if !idx_path.exists() {
+        return full_rebuild(Some(FallbackReason::IndexMissing));
+    }
+    let existing = match read(&idx_path) {
+        Ok(i) => i,
+        Err(message) => {
+            return full_rebuild(Some(FallbackReason::IndexUnreadable(message)));
+        }
+    };
+    if existing.schema_version != SCHEMA_VERSION {
+        return full_rebuild(Some(FallbackReason::SchemaVersionMismatch {
+            found: existing.schema_version,
+            expected: SCHEMA_VERSION,
+        }));
+    }
+
+    // Resolve config + fingerprint.
+    let config_path = project_root.join(".naming.toml");
+    if !config_path.exists() {
+        return Err(format!(
+            "no .naming.toml found at {}",
+            config_path.display()
+        ));
+    }
+    let resolved = config::resolve(&config_path)?;
+    let config_fingerprint = fingerprint_config(&resolved)?;
+    if existing.config_fingerprint != config_fingerprint {
+        return full_rebuild(Some(FallbackReason::ConfigFingerprintMismatch));
+    }
+
+    // Index existing sources for quick lookup.
+    let existing_by_path: BTreeMap<&str, &Source> = existing
+        .sources
+        .iter()
+        .map(|s| (s.path.as_str(), s))
+        .collect();
+
+    // Walk current source files and classify each.
+    let mut new_sources: Vec<Source> = Vec::new();
+    let mut classifications: BTreeMap<String, SourceChange> = BTreeMap::new();
+    let mut paths_to_extract: Vec<PathBuf> = Vec::new();
+
+    for abs in extract::list_source_files(project_root) {
+        let rel = relative_to(&abs, project_root);
+        let meta =
+            std::fs::metadata(&abs).map_err(|e| format!("metadata({}): {e}", abs.display()))?;
+        let mtime = meta
+            .modified()
+            .ok()
+            .and_then(|m| m.duration_since(UNIX_EPOCH).ok())
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+        let size = meta.len();
+
+        match existing_by_path.get(rel.as_str()) {
+            Some(prev) if prev.mtime == mtime && prev.size == size => {
+                // Fast path: trust the cached hash.
+                new_sources.push(Source {
+                    path: rel.clone(),
+                    hash: prev.hash.clone(),
+                    mtime,
+                    size,
+                });
+                classifications.insert(rel, SourceChange::Unchanged);
+            }
+            Some(prev) => {
+                // Slow path: rehash and decide.
+                let hash = hash_file(&abs)?;
+                if hash == prev.hash {
+                    new_sources.push(Source {
+                        path: rel.clone(),
+                        hash,
+                        mtime,
+                        size,
+                    });
+                    classifications.insert(rel, SourceChange::MtimeOnly);
+                } else {
+                    new_sources.push(Source {
+                        path: rel.clone(),
+                        hash,
+                        mtime,
+                        size,
+                    });
+                    classifications.insert(rel.clone(), SourceChange::Changed);
+                    paths_to_extract.push(abs);
+                }
+            }
+            None => {
+                let hash = hash_file(&abs)?;
+                new_sources.push(Source {
+                    path: rel.clone(),
+                    hash,
+                    mtime,
+                    size,
+                });
+                classifications.insert(rel.clone(), SourceChange::Added);
+                paths_to_extract.push(abs);
+            }
+        }
+    }
+    new_sources.sort_by(|a, b| a.path.cmp(&b.path));
+
+    // Detect removals.
+    let current_paths: BTreeSet<&str> = classifications.keys().map(String::as_str).collect();
+    let removed: Vec<String> = existing
+        .sources
+        .iter()
+        .filter(|s| !current_paths.contains(s.path.as_str()))
+        .map(|s| s.path.clone())
+        .collect();
+
+    let mut changed_count = 0usize;
+    let mut added_count = 0usize;
+    let mut unchanged_count = 0usize;
+    for c in classifications.values() {
+        match c {
+            SourceChange::Changed => changed_count += 1,
+            SourceChange::Added => added_count += 1,
+            SourceChange::Unchanged | SourceChange::MtimeOnly => unchanged_count += 1,
+        }
+    }
+
+    // Fast no-op path: when no file content changed, the existing
+    // families + ontology_refs are still authoritative. Return them as-is
+    // with the (possibly refreshed) source mtimes baked in. Avoids
+    // rebuilding the family map (~30ms on a 1000-file repo) and lets the
+    // CLI also skip the JSON serialize + atomic rename.
+    if changed_count == 0 && added_count == 0 && removed.is_empty() {
+        let idx = Index {
+            schema_version: SCHEMA_VERSION,
+            generated_at: iso8601_utc_now(),
+            config_fingerprint,
+            tool_version: env!("CARGO_PKG_VERSION").to_string(),
+            sources: new_sources,
+            families: existing.families.clone(),
+            ontology_refs: existing.ontology_refs.clone(),
+        };
+        let summary = UpdateSummary {
+            changed: 0,
+            added: 0,
+            removed: 0,
+            unchanged: unchanged_count,
+            elapsed_ms: started.elapsed().as_millis(),
+            fallback: None,
+        };
+        return Ok(UpdateResult {
+            index: idx,
+            summary,
+        });
+    }
+
+    // Collect preserved members from unchanged + mtime-only files.
+    let preserved_paths: BTreeSet<&str> = classifications
+        .iter()
+        .filter(|(_, c)| matches!(c, SourceChange::Unchanged | SourceChange::MtimeOnly))
+        .map(|(p, _)| p.as_str())
+        .collect();
+
+    // (family_id, FamilyMember-without-handle, family tags) accumulator.
+    let mut family_map: BTreeMap<String, Family> = BTreeMap::new();
+    for fam in &existing.families {
+        for m in &fam.members {
+            if preserved_paths.contains(m.path.as_str()) {
+                let entry = family_map
+                    .entry(fam.family_id.clone())
+                    .or_insert_with(|| Family {
+                        handle: String::new(),
+                        family_id: fam.family_id.clone(),
+                        tags: fam.tags.clone(),
+                        members: Vec::new(),
+                    });
+                entry.members.push(FamilyMember {
+                    handle: String::new(),
+                    family_handle: String::new(),
+                    name: m.name.clone(),
+                    convention: m.convention.clone(),
+                    path: m.path.clone(),
+                    line: m.line,
+                });
+            }
+        }
+    }
+
+    // Extract members for changed + added files.
+    for abs in &paths_to_extract {
+        for occ in extract::extract_from_file(abs) {
+            let canonical = occ.parsed.tags.join("_");
+            if canonical.is_empty() {
+                continue;
+            }
+            let entry = family_map
+                .entry(canonical.clone())
+                .or_insert_with(|| Family {
+                    handle: String::new(),
+                    family_id: canonical.clone(),
+                    tags: occ.parsed.tags.clone(),
+                    members: Vec::new(),
+                });
+            entry.members.push(FamilyMember {
+                handle: String::new(),
+                family_handle: String::new(),
+                name: occ.identifier,
+                convention: occ.parsed.convention.to_string(),
+                path: relative_to(&occ.file, project_root),
+                line: occ.line,
+            });
+        }
+    }
+
+    let mut families: Vec<Family> = family_map
+        .into_values()
+        .filter(|f| !f.members.is_empty())
+        .collect();
+    for f in &mut families {
+        f.members.sort_by(|a, b| {
+            a.path
+                .cmp(&b.path)
+                .then(a.line.cmp(&b.line))
+                .then(a.name.cmp(&b.name))
+        });
+        f.members.dedup();
+    }
+    families.sort_by(|a, b| a.family_id.cmp(&b.family_id));
+
+    let ontology_refs = load_ontology_refs(project_root)?;
+    let project_root_canonical = canonical_project_root(project_root);
+    assign_handles(&mut families, &project_root_canonical, &ontology_refs);
+
+    let idx = Index {
+        schema_version: SCHEMA_VERSION,
+        generated_at: iso8601_utc_now(),
+        config_fingerprint,
+        tool_version: env!("CARGO_PKG_VERSION").to_string(),
+        sources: new_sources,
+        families,
+        ontology_refs,
+    };
+
+    let summary = UpdateSummary {
+        changed: changed_count,
+        added: added_count,
+        removed: removed.len(),
+        unchanged: unchanged_count,
+        elapsed_ms: started.elapsed().as_millis(),
+        fallback: None,
+    };
+
+    Ok(UpdateResult {
+        index: idx,
+        summary,
+    })
+}
+
 /// Write an index to disk as pretty JSON, creating the parent directory.
+///
+/// Writes are atomic: the JSON is first written to `<path>.tmp` and then
+/// renamed over `<path>`. If serialization or the temp write fails, the
+/// temp file is best-effort removed and the error is propagated; the
+/// existing `<path>` is never partially overwritten.
 pub fn write(idx: &Index, path: &Path) -> Result<(), String> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)
@@ -242,8 +643,30 @@ pub fn write(idx: &Index, path: &Path) -> Result<(), String> {
     let mut json =
         serde_json::to_string_pretty(idx).map_err(|e| format!("serialize index: {e}"))?;
     json.push('\n');
-    std::fs::write(path, json).map_err(|e| format!("write({}): {e}", path.display()))?;
+    let tmp_path = tmp_path_for(path);
+    if let Err(e) = std::fs::write(&tmp_path, json.as_bytes()) {
+        let _ = std::fs::remove_file(&tmp_path);
+        return Err(format!("write({}): {e}", tmp_path.display()));
+    }
+    if let Err(e) = std::fs::rename(&tmp_path, path) {
+        let _ = std::fs::remove_file(&tmp_path);
+        return Err(format!(
+            "rename({} -> {}): {e}",
+            tmp_path.display(),
+            path.display()
+        ));
+    }
     Ok(())
+}
+
+/// Compute the atomic write tmp-path for a target index path.
+///
+/// Always lives alongside the target file (same directory) so that
+/// `rename(2)` stays on the same filesystem.
+pub fn tmp_path_for(path: &Path) -> PathBuf {
+    let mut s = path.as_os_str().to_os_string();
+    s.push(".tmp");
+    PathBuf::from(s)
 }
 
 /// Load an index from disk.

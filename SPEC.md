@@ -305,6 +305,9 @@ Builds a persistent project snapshot at `.naming/index.json`, alongside the reso
 - `ontology_refs` mirrors the records from `tagpath ontology` — one entry per `.naming/tags/*.md` file, with the canonical `tag`, project-relative `path`, and a `sha256:` hash of the markdown bytes. Sorted by `tag`.
 - `--check`: recomputes the fingerprint and per-source hashes and exits `0` if the on-disk index is still fresh, `1` otherwise. The stale report lists each reason: `index_missing`, `index_unreadable`, `schema_version`, `config_changed`, `tool_version`, `source_added`, `source_removed`, or `source_modified`. `--check` never writes.
 - `--force`: rebuilds even when the on-disk index would still pass a freshness check.
+- `--update`: incrementally updates the on-disk index by reusing cached source entries and re-extracting only files whose content actually changed. Falls back to a full rebuild (with a one-line stderr notice naming the reason) when the on-disk index is missing or unreadable, when the `schema_version` differs from the running binary, or when the resolved `config_fingerprint` differs from the on-disk value. On success, prints a one-line stderr digest: `[tagpath] incremental update: <changed> changed, <added> added, <removed> removed, <unchanged> unchanged (<ms>ms)`. Suppressible via `TAGPATH_QUIET=1`. The result is byte-identical to a full rebuild modulo `generated_at`. Writes are atomic via `.naming/index.json.tmp` → `rename(2)` so an interrupted update never produces a partially-written file.
+- `--update --force-full`: forces a full rebuild but keeps the digest summary format (`[tagpath] full rebuild: <sources> sources, <families> families (<ms>ms)`).
+- `--update --emit jsonl`: streams NDJSON with a leading `{"type":"update_plan","changed":N,"added":N,"removed":N,"unchanged":N}` record before the standard `header` / `source` / `family` / `member` / `footer` records.
 - Without flags, `tagpath index` rebuilds only when stale, otherwise prints `index is already fresh`.
 
 ### 9.14 search --index
@@ -656,8 +659,13 @@ Recommended consumer pattern:
 1. On boot, run `tagpath index --schema-version` once and refuse to
    start if the version is outside the supported range.
 2. Before each query, run `tagpath index --check`. If non-zero, run
-   `tagpath index` (or `tagpath index --emit jsonl` to stream) to
-   refresh.
+   `tagpath index --update` first — it reuses cached entries and
+   re-extracts only files whose content actually changed, and the
+   result is byte-identical to a full rebuild. `--update` falls back
+   to a full rebuild on its own if the schema or config fingerprint
+   no longer matches, so consumers do not need to chain the fallback
+   themselves. Plain `tagpath index` (or `tagpath index --emit jsonl`)
+   remains available for an unconditional rebuild.
 3. Read `.naming/index.json` (or consume NDJSON) and use the family
    handles as citation keys in your own envelopes.
 

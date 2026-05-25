@@ -1,5 +1,8 @@
 use clap::{Parser, Subcommand};
-use std::{io::Read, path::PathBuf};
+use std::{
+    io::{Read, Write},
+    path::PathBuf,
+};
 use tagpath::{
     alias, compression, config, extract, family, graph, index, lint, ontology, parser, prose,
     query, search,
@@ -88,6 +91,15 @@ enum Commands {
         /// Print the integer schema version and exit 0. No other output.
         #[arg(long)]
         schema_version: bool,
+        /// Incrementally update the on-disk index, re-extracting only files
+        /// whose content actually changed. Falls back to a full rebuild on
+        /// any schema or config-fingerprint mismatch.
+        #[arg(long)]
+        update: bool,
+        /// With `--update`, force a full rebuild but keep the update digest
+        /// summary format. Ignored when `--update` is not set.
+        #[arg(long)]
+        force_full: bool,
     },
     /// Generate aliases for an identifier in all naming conventions
     Alias {
@@ -208,7 +220,17 @@ fn main() {
             force,
             emit,
             schema_version,
-        } => cmd_index(&path, check, force, &emit, schema_version),
+            update,
+            force_full,
+        } => cmd_index(
+            &path,
+            check,
+            force,
+            &emit,
+            schema_version,
+            update,
+            force_full,
+        ),
         Commands::Alias {
             name,
             convention,
@@ -699,7 +721,15 @@ fn cmd_search_index(query: &str, path: &std::path::Path, format: &str) {
     }
 }
 
-fn cmd_index(path: &std::path::Path, check: bool, force: bool, emit: &str, schema_version: bool) {
+fn cmd_index(
+    path: &std::path::Path,
+    check: bool,
+    force: bool,
+    emit: &str,
+    schema_version: bool,
+    update: bool,
+    force_full: bool,
+) {
     if schema_version {
         println!("{}", index::SCHEMA_VERSION);
         return;
@@ -723,6 +753,10 @@ fn cmd_index(path: &std::path::Path, check: bool, force: bool, emit: &str, schem
         }
     };
     let idx_path = index::index_path(&project_root);
+    if update {
+        cmd_index_update(&project_root, &idx_path, emit_jsonl, force_full);
+        return;
+    }
     if check {
         let report = match index::check(&project_root) {
             Ok(r) => r,
@@ -795,6 +829,98 @@ fn cmd_index(path: &std::path::Path, check: bool, force: bool, emit: &str, schem
         idx.families.len(),
         idx.ontology_refs.len(),
     );
+}
+
+fn cmd_index_update(
+    project_root: &std::path::Path,
+    idx_path: &std::path::Path,
+    emit_jsonl: bool,
+    force_full: bool,
+) {
+    let quiet = std::env::var_os("TAGPATH_QUIET").is_some();
+    let opts = index::BuildOptions {
+        project_root: project_root.to_path_buf(),
+    };
+
+    let result = if force_full {
+        let started = std::time::Instant::now();
+        let idx = match index::build(&opts) {
+            Ok(i) => i,
+            Err(e) => {
+                eprintln!("error: {e}");
+                std::process::exit(1);
+            }
+        };
+        let elapsed_ms = started.elapsed().as_millis();
+        let summary = index::UpdateSummary {
+            changed: 0,
+            added: idx.sources.len(),
+            removed: 0,
+            unchanged: 0,
+            elapsed_ms,
+            fallback: None,
+        };
+        index::UpdateResult {
+            index: idx,
+            summary,
+        }
+    } else {
+        match index::update_incremental(&opts) {
+            Ok(r) => r,
+            Err(e) => {
+                eprintln!("error: {e}");
+                std::process::exit(1);
+            }
+        }
+    };
+
+    if let Some(reason) = &result.summary.fallback
+        && !quiet
+    {
+        eprintln!(
+            "[tagpath] incremental update falling back to full rebuild: {}",
+            reason.as_str()
+        );
+    }
+
+    if emit_jsonl {
+        let stdout = std::io::stdout();
+        let mut out = stdout.lock();
+        let plan = result.summary.plan_line();
+        if let Err(e) = writeln!(out, "{}", serde_json::to_string(&plan).unwrap()) {
+            eprintln!("error: write update_plan: {e}");
+            std::process::exit(1);
+        }
+        if let Err(e) = index::emit_jsonl(&result.index, &mut out) {
+            eprintln!("error: {e}");
+            std::process::exit(1);
+        }
+        return;
+    }
+
+    // Skip the JSON re-serialize + atomic rename on a true no-op update:
+    // every classification was Unchanged or MtimeOnly, nothing added, nothing
+    // removed → the on-disk file is already byte-equivalent (modulo
+    // `generated_at`). This is the hot path for `tagpath index --update`
+    // polled by tsift/agent-doc and avoids ~50ms of serialization on a
+    // 1000-file repo.
+    if !result.summary.is_noop()
+        && let Err(e) = index::write(&result.index, idx_path)
+    {
+        eprintln!("error: {e}");
+        std::process::exit(1);
+    }
+
+    if !quiet {
+        if force_full || result.summary.fallback.is_some() {
+            eprintln!(
+                "{}",
+                index::format_full_rebuild_digest(&result.index, result.summary.elapsed_ms)
+            );
+        } else {
+            eprintln!("{}", index::format_update_digest(&result.summary));
+        }
+    }
 }
 
 fn format_stale_reason(reason: &index::StaleReason) -> String {

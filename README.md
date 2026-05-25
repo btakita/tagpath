@@ -101,6 +101,7 @@ tagpath graph src/ --query "user"     # subgraph around "user" tag
 tagpath index                          # build or refresh when stale
 tagpath index --check                  # exit 0 if fresh, 1 if stale
 tagpath index --force                  # rebuild even when fresh
+tagpath index --update                 # incremental update — re-extract only files that changed
 tagpath search "user" . --index        # query the persisted index instead of rescanning
 
 # Initialize a .naming.toml
