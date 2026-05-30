@@ -42,10 +42,8 @@ fn core_split_plan_inventory_mentions_native_facade_modules() {
 fn workspace_manifest_contains_core_dependency_boundary() {
     let root_manifest = include_str!("../Cargo.toml");
     assert!(root_manifest.contains("members = [\".\", \"crates/tagpath-core\"]"));
-    assert!(
-        root_manifest
-            .contains("tagpath-core = { version = \"=0.12.0\", path = \"crates/tagpath-core\" }")
-    );
+    assert!(root_manifest
+        .contains("tagpath-core = { version = \"=0.12.0\", path = \"crates/tagpath-core\" }"));
 
     let core_manifest = include_str!("../crates/tagpath-core/Cargo.toml");
     assert!(core_manifest.contains("name = \"tagpath-core\""));
@@ -67,6 +65,25 @@ fn workspace_manifest_contains_core_dependency_boundary() {
             !core_manifest.contains(forbidden),
             "tagpath-core must not depend on `{forbidden}`"
         );
+    }
+}
+
+#[test]
+fn root_manifest_preserves_facade_package_shape_and_feature_defaults() {
+    let root_manifest = include_str!("../Cargo.toml");
+    for required in [
+        "name = \"tagpath\"",
+        "version = \"0.12.0\"",
+        "crate-type = [\"cdylib\", \"rlib\"]",
+        "name = \"tagpath\"\npath = \"src/main.rs\"",
+        "required-features = [\"treesitter\"]",
+        "default = [\"lang-rust\", \"lang-python\", \"lang-javascript\", \"lang-typescript\", \"lang-go\", \"lang-c\", \"lang-cpp\", \"lang-java\", \"lang-ruby\", \"lang-php\", \"lang-csharp\", \"lang-swift\", \"lang-kotlin\", \"mcp\", \"watch\"]",
+        "mcp = []",
+        "wasm = [\"dep:wasm-bindgen\", \"dep:serde-wasm-bindgen\", \"dep:js-sys\"]",
+        "watch = [\"dep:notify\", \"dep:libc\"]",
+        "dyn-grammar = [\"treesitter\", \"dep:libloading\", \"dep:tree-sitter-language\"]",
+    ] {
+        assert!(root_manifest.contains(required), "Cargo.toml missing `{required}`");
     }
 }
 

@@ -8,6 +8,9 @@
   workspace crate: parser, alias, family, prose, query normalization, and
   compression. The root `tagpath` crate remains the CLI/library facade
   and preserves existing imports such as `tagpath::parser::parse`.
+- Added facade regression coverage for root package shape, feature
+  defaults, old public type paths, and CLI commands backed by
+  `tagpath-core`.
 
 ## v0.11.1 — 2026-05-25
 

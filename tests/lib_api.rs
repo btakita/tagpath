@@ -1,4 +1,8 @@
-use tagpath::parser::{self, ALL_CONVENTIONS, Convention};
+use tagpath::{
+    alias, compression, family,
+    parser::{self, Convention, ALL_CONVENTIONS},
+    prose, query,
+};
 
 #[test]
 fn parse_via_lib() {
@@ -132,6 +136,57 @@ fn compression_report_via_lib() {
     assert_eq!(report.families[0].canonical, "raw_symbol");
     assert_eq!(report.families[0].aliases["kebab-case"], "raw-symbol");
     assert!(report.metrics.token_savings_percent > 0.0);
+}
+
+#[test]
+fn facade_exports_core_public_types_by_their_old_paths() {
+    let parsed: parser::ParsedName = parser::parse("create_user_profile", Convention::SnakeCase);
+    assert_eq!(parsed.tags, vec!["create", "user", "profile"]);
+
+    let aliases: alias::AliasResult = alias::generate_aliases("create_user_profile", None);
+    assert_eq!(aliases.aliases["PascalCase"], "CreateUserProfile");
+
+    let tag_family: family::TagFamily = family::generate_family("auth0__user__validate");
+    let dimension: &family::TagDimension = &tag_family.dimensions[0];
+    let surface: &family::SurfaceExample = &tag_family.examples[0];
+    assert_eq!(dimension.canonical, "auth0");
+    assert_eq!(surface.convention, "snake_case");
+
+    let occurrence = family::FamilyOccurrence {
+        identifier: "create_user".to_string(),
+        file: "src/lib.rs".into(),
+        line: 1,
+        column: 0,
+        convention: "snake_case".to_string(),
+        tags: vec!["create".to_string(), "user".to_string()],
+        role: Some("factory".to_string()),
+        shape: None,
+        context: Some("function".to_string()),
+    };
+    let summaries: Vec<family::TagFamilySummary> = family::summarize_occurrences([occurrence], 1);
+    let summary_example: &family::FamilySummaryExample = &summaries[0].examples[0];
+    assert_eq!(summary_example.context.as_deref(), Some("function"));
+
+    let prose: prose::ProseResult = prose::to_prose("is_valid_email");
+    assert_eq!(prose.prose, "Checks if email is valid");
+
+    let normalized: query::NormalizedQuery = query::normalize_query("rawSymbol output");
+    let first_tag: &query::QueryTag = &normalized.tags[0];
+    assert_eq!(first_tag.tag, "raw");
+
+    let rows = vec![compression::RawSymbolRow {
+        identifier: "rawSymbol".to_string(),
+        file: "src/search.ts".into(),
+        line: 7,
+        column: 0,
+        context: Some("field".to_string()),
+    }];
+    let report: compression::CompressionReport = compression::build_report(&rows);
+    let metrics: compression::CompressionMetrics = report.metrics.clone();
+    let family_preview: &compression::CompressionFamilyPreview = &report.families[0];
+    let family_example: &compression::CompressionFamilyExample = &family_preview.examples[0];
+    assert_eq!(metrics.token_estimate, "ceil(utf8_bytes / 4)");
+    assert_eq!(family_example.identifier, "rawSymbol");
 }
 
 #[test]

@@ -1186,6 +1186,14 @@ Do not re-export the entire core crate as an undifferentiated prelude in
 the first pass. Named module re-exports keep the old public surface
 obvious and make accidental API expansion easier to review.
 
+The root package is also the compatibility facade for runtime behavior:
+it keeps the `tagpath` binary name and `src/main.rs` entrypoint, the
+`treesitter` binary feature gate, the `cdylib`/`rlib` library outputs,
+and the existing default feature set for language grammars, MCP, and
+watch mode. Facade tests must exercise both the old `tagpath::...`
+library paths and CLI commands backed by core modules (`parse`, `alias`,
+`family`, `prose`, and `normalize-query`).
+
 ### 18.5 Implementation checklist
 
 1. `crates/tagpath-core` has its own `Cargo.toml` and `src/lib.rs`.
