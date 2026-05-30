@@ -620,31 +620,41 @@ fn check_backlog_ids(path: &Path, text: &str, comments: &[Comment], out: &mut Ve
     let backlog_spans = collect_component_spans(comments, "agent:backlog");
     let exchange_spans = collect_component_spans(comments, "agent:exchange");
 
-    // Backlog id collision: scan `[#id]` tokens inside each backlog span.
-    let id_re = regex::Regex::new(r"\[#([A-Za-z0-9_\-]+)\]").unwrap();
+    // Backlog id collision: only the LEADING `[#id]` of each backlog ITEM line
+    // is an item-defining id. Bracket-id tokens that appear later in an item's
+    // description (e.g. `do [#id]` example syntax, or a referenced sibling id)
+    // are references, not definitions, and must not be parsed as colliding ids
+    // (#free-text-queue-head-consume session: a `do [#id]` example in two item
+    // descriptions falsely tripped this collision and blocked finalize).
+    let item_id_re =
+        regex::Regex::new(r"^\s*[-*]\s*\[[ xX/]\]\s*(\[#([A-Za-z0-9_\-]+)\])").unwrap();
     for (start, end) in &backlog_spans {
         let span = &text[*start..*end];
         let mut seen: std::collections::HashMap<String, (usize, usize)> = Default::default();
-        for cap in id_re.captures_iter(span) {
-            let id = cap.get(1).unwrap().as_str().to_string();
-            let m = cap.get(0).unwrap();
-            let global_off = start + m.start();
-            let (line, col) = byte_to_line_col(text, global_off);
-            if let Some((prev_line, _prev_col)) = seen.get(&id) {
-                out.push(LintFinding {
-                    path: path.to_path_buf(),
-                    line,
-                    col,
-                    rule: "agent-doc/backlog-id-collision".to_string(),
-                    severity: LintSeverity::Error,
-                    message: format!(
-                        "backlog id `[#{id}]` duplicates earlier entry on line {prev_line}"
-                    ),
-                    fix_hint: Some(format!("rename one of the `[#{id}]` ids")),
-                });
-            } else {
-                seen.insert(id, (line, col));
+        let mut line_off = 0usize;
+        for line in span.split_inclusive('\n') {
+            if let Some(cap) = item_id_re.captures(line) {
+                let id = cap.get(2).unwrap().as_str().to_string();
+                let m = cap.get(1).unwrap();
+                let global_off = start + line_off + m.start();
+                let (line_no, col) = byte_to_line_col(text, global_off);
+                if let Some((prev_line, _prev_col)) = seen.get(&id) {
+                    out.push(LintFinding {
+                        path: path.to_path_buf(),
+                        line: line_no,
+                        col,
+                        rule: "agent-doc/backlog-id-collision".to_string(),
+                        severity: LintSeverity::Error,
+                        message: format!(
+                            "backlog id `[#{id}]` duplicates earlier entry on line {prev_line}"
+                        ),
+                        fix_hint: Some(format!("rename one of the `[#{id}]` ids")),
+                    });
+                } else {
+                    seen.insert(id, (line_no, col));
+                }
             }
+            line_off += line.len();
         }
     }
 
@@ -973,6 +983,25 @@ mod tests {
             findings
                 .iter()
                 .any(|f| f.rule == "agent-doc/backlog-id-collision")
+        );
+    }
+
+    #[test]
+    fn backlog_id_collision_ignores_bracket_ids_in_descriptions() {
+        // A `[#id]` appearing in two item DESCRIPTIONS (example syntax / a
+        // referenced sibling id) is not a definition and must not collide.
+        let text = concat!(
+            "<!-- agent:backlog -->\n",
+            "- [ ] [#alpha] uses `do [#id]` syntax in its description\n",
+            "- [ ] [#beta] also mentions a `do [#id]` example here\n",
+            "<!-- /agent:backlog -->\n",
+        );
+        let findings = lint_str(text);
+        assert!(
+            !findings
+                .iter()
+                .any(|f| f.rule == "agent-doc/backlog-id-collision"),
+            "bracket-ids inside descriptions must not trip the collision rule: {findings:?}"
         );
     }
 
