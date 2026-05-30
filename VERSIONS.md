@@ -1,6 +1,6 @@
 # tagpath versions
 
-## v0.12.0 — Unreleased
+## v0.12.0 — 2026-05-30
 
 ### Internal
 
