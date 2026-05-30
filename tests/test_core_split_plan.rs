@@ -148,3 +148,45 @@ fn ci_workflows_cover_split_release_checks() {
         );
     }
 }
+
+#[test]
+fn adapter_crate_decisions_are_documented() {
+    let spec = include_str!("../SPEC.md");
+    for required in [
+        "### 18.7 Adapter crate decision",
+        "do not add separate Rust crates named",
+        "`tagpath-wasm`, `tagpath-mcp`, or `tagpath-project`",
+        "`tagpath::wasm` remains the wasm-bindgen adapter",
+        "`@btakita/tagpath-wasm` remains an npm package produced by",
+        "`tagpath::mcp` stays in the root facade",
+        "`tagpath-project` is deferred",
+        "Revisit adapter crates only after `tagpath-core` 0.12.x",
+    ] {
+        assert!(spec.contains(required), "SPEC.md missing `{required}`");
+    }
+
+    let readme = include_str!("../README.md");
+    for required in [
+        "No separate Rust crates named `tagpath-wasm`, `tagpath-mcp`, or",
+        "`tagpath-project` are part of the first split",
+        "The wasm-bindgen adapter,",
+        "MCP server, and project/index/search surfaces remain in the root facade",
+        "The npm package `@btakita/tagpath-wasm`",
+        "`scripts/build-wasm.sh`",
+    ] {
+        assert!(readme.contains(required), "README.md missing `{required}`");
+    }
+
+    let versions = include_str!("../VERSIONS.md");
+    for required in [
+        "Documented the adapter-crate decision",
+        "`tagpath-wasm`, `tagpath-mcp`,",
+        "`tagpath-project` stay deferred",
+        "surfaces remain rooted in the `tagpath` facade",
+    ] {
+        assert!(
+            versions.contains(required),
+            "VERSIONS.md missing `{required}`"
+        );
+    }
+}

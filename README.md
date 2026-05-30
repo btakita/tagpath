@@ -15,6 +15,12 @@ identifier semantics are also available as the `tagpath-core` crate for
 library, agent, and wasm-host consumers that do not need filesystem,
 tree-sitter, MCP, watch, or CLI dependencies.
 
+No separate Rust crates named `tagpath-wasm`, `tagpath-mcp`, or
+`tagpath-project` are part of the first split. The wasm-bindgen adapter,
+MCP server, and project/index/search surfaces remain in the root facade
+while `tagpath-core` stabilizes. The npm package `@btakita/tagpath-wasm`
+is still produced from that facade by `scripts/build-wasm.sh`.
+
 ## Quick Start
 
 ```sh

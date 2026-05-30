@@ -14,6 +14,10 @@
 - Added split-aware CI and release smoke checks for workspace tests,
   no-default-features builds, wasm target builds, and crates.io publish
   ordering.
+- Documented the adapter-crate decision: `tagpath-wasm`, `tagpath-mcp`,
+  and `tagpath-project` stay deferred while `tagpath-core` stabilizes.
+  The existing wasm npm package, MCP server, and project/index/search
+  surfaces remain rooted in the `tagpath` facade for v0.12.0.
 
 ## v0.11.1 — 2026-05-25
 

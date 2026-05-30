@@ -1247,7 +1247,30 @@ resolve the same-version `tagpath-core`; that dependency-resolution
 blocker is accepted until `tagpath-core` has been published, and any
 other facade packaging error stays fatal.
 
-Adapter crates such as `tagpath-wasm`, `tagpath-mcp`, or
-`tagpath-project` remain follow-up decisions. Only split them after the
-core extraction has shipped and the new dependency boundary is proven in
-downstream use.
+### 18.7 Adapter crate decision
+
+Current decision: do not add separate Rust crates named
+`tagpath-wasm`, `tagpath-mcp`, or `tagpath-project` during the first
+split. The only new crate in this release train is `tagpath-core`.
+
+`tagpath::wasm` remains the wasm-bindgen adapter in the root facade, and
+`@btakita/tagpath-wasm` remains an npm package produced by
+`scripts/build-wasm.sh`, not a Rust crate. That adapter reuses
+`tagpath-core` behind the existing `wasm` feature and continues to be
+validated by the wasm target build plus `.github/workflows/wasm-build.yml`.
+
+`tagpath::mcp` stays in the root facade because it owns JSON-RPC stdio,
+harness config installation, project config loading, indexed search, and
+filesystem-backed lint/search behavior. Those concerns still depend on
+the native facade modules listed in 18.2, so splitting a `tagpath-mcp`
+crate now would either duplicate facade dependencies or freeze adapter
+APIs before the core boundary has been exercised by downstream users.
+
+`tagpath-project` is deferred. Project, config, index, search, ontology,
+graph, and rename surfaces stay in the root facade until published
+`tagpath-core` consumers prove a separate project-model crate would reduce
+real dependency weight without fragmenting the public contract.
+
+Revisit adapter crates only after `tagpath-core` 0.12.x has shipped and a
+downstream consumer needs a narrower crate boundary than the existing root
+facade plus `tagpath-core` provides.
