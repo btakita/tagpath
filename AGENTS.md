@@ -54,10 +54,16 @@ presets/               Convention presets (immutable-tag.toml)
 
 ## Release Process
 
-1. Bump version in `Cargo.toml`
-2. `cargo test && cargo clippy`
-3. `git tag v<version> && git push --tags`
-4. `cargo publish`
+1. Bump the lockstep version in `Cargo.toml` and
+   `crates/tagpath-core/Cargo.toml`.
+2. Run `cargo clippy --workspace --all-targets -- -D warnings`,
+   `cargo test --workspace`, `cargo test -p tagpath-core
+   --no-default-features`, `cargo test -p tagpath --lib
+   --no-default-features`, and the wasm target build.
+3. Run `scripts/check-release.sh`.
+4. Publish `tagpath-core` first.
+5. Rerun `scripts/check-release.sh`, then publish `tagpath`.
+6. Tag the release only after both crates publish successfully.
 
 ## Phases
 

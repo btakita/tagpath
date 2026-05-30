@@ -403,6 +403,24 @@ Build locally with `scripts/build-wasm.sh` (requires `wasm-pack`). The script
 produces a publishable `pkg/` directory and `pkg-smoke/smoke.mjs` exercises
 every binding against it.
 
+## Release checks
+
+The workspace is split into `tagpath-core` and the root `tagpath`
+CLI/library facade. Before publishing a lockstep release, run:
+
+```sh
+cargo clippy --workspace --all-targets -- -D warnings
+cargo test --workspace
+cargo test -p tagpath-core --no-default-features
+cargo test -p tagpath --lib --no-default-features
+cargo build --target wasm32-unknown-unknown --no-default-features --features wasm
+scripts/check-release.sh
+```
+
+Publish order matters: publish `tagpath-core` first, then rerun
+`scripts/check-release.sh` and publish `tagpath` after crates.io can
+resolve the same-version core crate.
+
 ## Advanced: dynamic tree-sitter grammars
 
 Tagpath can load tree-sitter grammars from compiled shared libraries at

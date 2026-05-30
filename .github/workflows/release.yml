@@ -8,7 +8,36 @@ permissions:
   contents: write
 
 jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+          targets: wasm32-unknown-unknown
+
+      - name: Clippy workspace
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Test workspace
+        run: cargo test --workspace
+
+      - name: Test core without default features
+        run: cargo test -p tagpath-core --no-default-features
+
+      - name: Test facade library without default features
+        run: cargo test -p tagpath --lib --no-default-features
+
+      - name: Build wasm target
+        run: cargo build --target wasm32-unknown-unknown --no-default-features --features wasm
+
+      - name: Check crates.io publish order
+        run: scripts/check-release.sh
+
   build:
+    needs: checks
     strategy:
       fail-fast: false
       matrix:

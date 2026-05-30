@@ -11,6 +11,9 @@
 - Added facade regression coverage for root package shape, feature
   defaults, old public type paths, and CLI commands backed by
   `tagpath-core`.
+- Added split-aware CI and release smoke checks for workspace tests,
+  no-default-features builds, wasm target builds, and crates.io publish
+  ordering.
 
 ## v0.11.1 — 2026-05-25
 

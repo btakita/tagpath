@@ -94,3 +94,57 @@ fn facade_reexports_core_modules_by_name() {
         lib.contains("pub use tagpath_core::{alias, compression, family, parser, prose, query};")
     );
 }
+
+#[test]
+fn ci_workflows_cover_split_release_checks() {
+    let ci = include_str!("../.github/workflows/ci.yml");
+    for required in [
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "cargo test --workspace",
+        "cargo test -p tagpath-core --no-default-features",
+        "cargo test -p tagpath --lib --no-default-features",
+        "cargo build --target wasm32-unknown-unknown --no-default-features --features wasm",
+        "scripts/check-release.sh",
+        "targets: wasm32-unknown-unknown",
+    ] {
+        assert!(ci.contains(required), "ci.yml missing `{required}`");
+    }
+
+    let wasm = include_str!("../.github/workflows/wasm-build.yml");
+    for required in ["./scripts/build-wasm.sh", "node pkg-smoke/smoke.mjs"] {
+        assert!(
+            wasm.contains(required),
+            "wasm-build.yml missing `{required}`"
+        );
+    }
+
+    let release = include_str!("../.github/workflows/release.yml");
+    for required in [
+        "needs: checks",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "cargo test --workspace",
+        "cargo test -p tagpath-core --no-default-features",
+        "cargo test -p tagpath --lib --no-default-features",
+        "cargo build --target wasm32-unknown-unknown --no-default-features --features wasm",
+        "scripts/check-release.sh",
+    ] {
+        assert!(
+            release.contains(required),
+            "release.yml missing `{required}`"
+        );
+    }
+
+    let release_check = include_str!("../scripts/check-release.sh");
+    for required in [
+        "cargo publish --dry-run --allow-dirty -p tagpath-core",
+        "cargo publish --dry-run --allow-dirty -p tagpath",
+        "no matching package named.*tagpath-core",
+        "TAGPATH_RELEASE_CHECK_STRICT_FACADE",
+        "Publish order: cargo publish -p tagpath-core",
+    ] {
+        assert!(
+            release_check.contains(required),
+            "check-release.sh missing `{required}`"
+        );
+    }
+}

@@ -1224,9 +1224,28 @@ Release verification must include:
 - `cargo test`
 - `cargo clippy`
 - `cargo test -p tagpath-core --no-default-features`
+- `cargo test -p tagpath --lib --no-default-features`
 - `cargo build --target wasm32-unknown-unknown --no-default-features --features wasm`
 - `cargo install --path . --force`
 - A crates.io dry run for both packages before the real publish.
+
+CI must keep those checks split-aware:
+
+- `.github/workflows/ci.yml` runs workspace clippy/tests, the
+  `tagpath-core` no-default-features test, the root facade library
+  no-default-features test, the plain wasm target build, and
+  `scripts/check-release.sh`.
+- `.github/workflows/wasm-build.yml` runs `scripts/build-wasm.sh` and
+  `pkg-smoke/smoke.mjs` so the merged npm package remains covered.
+- `.github/workflows/release.yml` gates release artifacts behind the same
+  workspace clippy/test/no-default/wasm/publish-order smoke checks.
+
+`scripts/check-release.sh` is intentionally publish-order aware. It must
+fail if `tagpath-core` cannot dry-run package successfully. The root
+`tagpath` dry run may pass, or it may report that crates.io cannot yet
+resolve the same-version `tagpath-core`; that dependency-resolution
+blocker is accepted until `tagpath-core` has been published, and any
+other facade packaging error stays fatal.
 
 Adapter crates such as `tagpath-wasm`, `tagpath-mcp`, or
 `tagpath-project` remain follow-up decisions. Only split them after the
