@@ -1083,3 +1083,148 @@ For long-lived agent integrations, treat `hello` as the schema-
 negotiation handshake, persist the `project_root` + `tool_version` for
 log correlation, and reset any local handle cache when
 `schema_version` differs from the last-seen value.
+
+## 18. Workspace split plan
+
+The first crate split is a conservative `tagpath-core` extraction. The
+goal is to give agents, wasm hosts, and other libraries a small stable
+identifier semantics crate without changing the existing `tagpath`
+binary, CLI defaults, or public import paths.
+
+This is a one-core-crate plan, not a broad workspace breakup. Tree-sitter
+languages, MCP, watch mode, indexing, config resolution, filesystem
+search, and rename support stay in the existing `tagpath` facade until
+there is concrete consumer pressure to split them further.
+
+### 18.1 Workspace shape
+
+The next implementation phase should turn the repository root into a
+workspace:
+
+```toml
+[workspace]
+members = [".", "crates/tagpath-core"]
+resolver = "3"
+```
+
+`crates/tagpath-core` owns the pure semantic library. The root `tagpath`
+package remains the published binary/library facade and depends on the
+core crate with a path dependency during development and a crates.io
+version during publish:
+
+```toml
+tagpath-core = { version = "=<same-version>", path = "crates/tagpath-core" }
+```
+
+Use lockstep versions for the first split. Publishing `tagpath-core`
+under the same version as `tagpath` avoids a second compatibility matrix
+while the public core API is still being validated.
+
+### 18.2 Public API inventory
+
+Move these public modules and functions into `tagpath-core` first:
+
+| Current path | Core API to preserve | Reason |
+|---|---|---|
+| `tagpath::parser` | `Convention`, `ParsedName`, `ALL_CONVENTIONS`, `detect_convention`, `parse`, `join_tags`, `capitalize` | Foundational identifier semantics; no filesystem, CLI, or tree-sitter dependency. |
+| `tagpath::alias` | `AliasResult`, `generate_aliases` | Pure wrapper around parser + convention rendering. |
+| `tagpath::family` | `TagFamily`, `TagDimension`, `SurfaceExample`, `FamilyOccurrence`, `TagFamilySummary`, `FamilySummaryExample`, `generate_family`, `generate_family_with_convention`, `summarize_occurrences` | Canonical family model used by agents and compact previews. |
+| `tagpath::prose` | `ProseResult`, `to_prose` | Pure natural-language projection from parsed tags. |
+| `tagpath::query` | `NormalizedQuery`, `QueryTag`, `normalize_query`, `normalize_query_tags` | Pure prompt/query normalization for agent-facing callers. |
+| `tagpath::compression` | `RawSymbolRow`, `CompressionFamilyPreview`, `CompressionFamilyExample`, `CompressionMetrics`, `CompressionReport`, `build_report`, `build_report_with_example_limit`, `render_raw_symbol_preview`, `render_compact_family_preview`, `estimate_tokens` | Pure row-to-family compression over caller-supplied symbols. |
+
+Keep these modules in the root `tagpath` crate for now:
+
+| Current path | Keep in facade because |
+|---|---|
+| `tagpath::config` | It owns `.naming.toml` loading, extends resolution, bundled preset generation, home-dir expansion, and TOML parsing. A later `tagpath-config` split can separate schema-only types if needed. |
+| `tagpath::extract` | It walks the filesystem and optionally calls tree-sitter. |
+| `tagpath::search` | It scans source paths and returns filesystem-backed matches. |
+| `tagpath::lint` | It combines config, extraction, and agent-doc file linting. |
+| `tagpath::index` / `tagpath::meta_index` | They own on-disk schemas, hashes, sidecars, and update/write flows. |
+| `tagpath::ontology` | It loads `.naming/tags/*.md` from disk. |
+| `tagpath::graph` | It depends on project extraction and `petgraph`. |
+| `tagpath::rename` | It plans and writes source edits. |
+| `tagpath::mcp` | It is a stdio server plus harness installer surface. |
+| `tagpath::treesitter` | It owns native parser bindings and dynamic grammar loading. |
+| `tagpath::watch` | It owns native filesystem watching, PID locks, signals, and NDJSON events. |
+| `tagpath::wasm` | It remains the wasm-bindgen adapter that reuses `tagpath-core`; do not publish it as a separate crate during the first split. |
+
+### 18.3 Dependency boundary
+
+`tagpath-core` should start with only:
+
+- `serde = { version = "1", features = ["derive"] }`
+- Rust standard library collections/path types
+
+It must not depend on `clap`, `regex`, `toml`, `tree-sitter`,
+`tree-sitter-*`, `petgraph`, `walkdir`, `sha2`, `bincode`,
+`wasm-bindgen`, `serde-wasm-bindgen`, `js-sys`, `libloading`,
+`tree-sitter-language`, `dirs`, `notify`, or `libc`.
+
+The root `tagpath` crate keeps the native dependency graph and may reduce
+duplicates later, but that cleanup is not required for the first split.
+The success condition is that `cargo test -p tagpath-core
+--no-default-features` proves the pure crate without native features,
+while the existing root `tagpath` test suite still proves the facade.
+
+### 18.4 Compatibility re-exports
+
+The split must preserve existing imports. After the move, root
+`src/lib.rs` should re-export core modules by module name:
+
+```rust
+pub use tagpath_core::{alias, compression, family, parser, prose, query};
+```
+
+Existing downstream code such as `tagpath::parser::parse`,
+`tagpath::alias::generate_aliases`, `tagpath::family::generate_family`,
+`tagpath::prose::to_prose`, `tagpath::query::normalize_query`, and
+`tagpath::compression::build_report` must continue to compile. Keep the
+current `tests/lib_api.rs` coverage in the facade crate, and add core
+crate tests for the moved modules so both layers have direct proof.
+
+Do not re-export the entire core crate as an undifferentiated prelude in
+the first pass. Named module re-exports keep the old public surface
+obvious and make accidental API expansion easier to review.
+
+### 18.5 Implementation sequence
+
+1. Create `crates/tagpath-core` with its own `Cargo.toml` and `src/lib.rs`.
+2. Move `parser`, `alias`, `family`, `prose`, `query`, and `compression`
+   into the core crate with `git mv`, preserving module names and unit
+   tests.
+3. Add the root `tagpath-core` dependency and replace the moved root
+   modules with named re-exports from `tagpath_core`.
+4. Update native modules that use `crate::{parser, family, ...}` only if
+   the re-exports are insufficient; prefer keeping those paths stable.
+5. Keep `tests/lib_api.rs` as facade compatibility coverage, and add
+   `cargo test -p tagpath-core --no-default-features` to the verification
+   checklist.
+6. Update README and release notes only after the code split is complete.
+
+### 18.6 Release impact
+
+The first split should be a minor `tagpath` release, not a breaking
+release, because the existing crate name, binary name, feature defaults,
+and module import paths stay intact.
+
+Publish order:
+
+1. Publish `tagpath-core`.
+2. Publish `tagpath` after the core crate is visible on crates.io.
+3. Tag the release only after both packages publish successfully.
+
+Release verification must include:
+
+- `cargo test`
+- `cargo clippy`
+- `cargo test -p tagpath-core --no-default-features`
+- `cargo build --target wasm32-unknown-unknown --no-default-features --features wasm`
+- `cargo install --path . --force`
+- A crates.io dry run for both packages before the real publish.
+
+Adapter crates such as `tagpath-wasm`, `tagpath-mcp`, or
+`tagpath-project` remain follow-up decisions. Only split them after the
+core extraction has shipped and the new dependency boundary is proven in
+downstream use.
