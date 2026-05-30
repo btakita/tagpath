@@ -1084,7 +1084,7 @@ negotiation handshake, persist the `project_root` + `tool_version` for
 log correlation, and reset any local handle cache when
 `schema_version` differs from the last-seen value.
 
-## 18. Workspace split plan
+## 18. Workspace split
 
 The first crate split is a conservative `tagpath-core` extraction. The
 goal is to give agents, wasm hosts, and other libraries a small stable
@@ -1098,8 +1098,7 @@ there is concrete consumer pressure to split them further.
 
 ### 18.1 Workspace shape
 
-The next implementation phase should turn the repository root into a
-workspace:
+The repository root is a workspace:
 
 ```toml
 [workspace]
@@ -1122,7 +1121,7 @@ while the public core API is still being validated.
 
 ### 18.2 Public API inventory
 
-Move these public modules and functions into `tagpath-core` first:
+These public modules and functions live in `tagpath-core`:
 
 | Current path | Core API to preserve | Reason |
 |---|---|---|
@@ -1152,7 +1151,7 @@ Keep these modules in the root `tagpath` crate for now:
 
 ### 18.3 Dependency boundary
 
-`tagpath-core` should start with only:
+`tagpath-core` starts with only:
 
 - `serde = { version = "1", features = ["derive"] }`
 - Rust standard library collections/path types
@@ -1163,15 +1162,14 @@ It must not depend on `clap`, `regex`, `toml`, `tree-sitter`,
 `tree-sitter-language`, `dirs`, `notify`, or `libc`.
 
 The root `tagpath` crate keeps the native dependency graph and may reduce
-duplicates later, but that cleanup is not required for the first split.
-The success condition is that `cargo test -p tagpath-core
---no-default-features` proves the pure crate without native features,
-while the existing root `tagpath` test suite still proves the facade.
+duplicates later. `cargo test -p tagpath-core --no-default-features`
+proves the pure crate without native features, while the existing root
+`tagpath` test suite still proves the facade.
 
 ### 18.4 Compatibility re-exports
 
-The split must preserve existing imports. After the move, root
-`src/lib.rs` should re-export core modules by module name:
+The split preserves existing imports. Root `src/lib.rs` re-exports core
+modules by module name:
 
 ```rust
 pub use tagpath_core::{alias, compression, family, parser, prose, query};
@@ -1188,20 +1186,18 @@ Do not re-export the entire core crate as an undifferentiated prelude in
 the first pass. Named module re-exports keep the old public surface
 obvious and make accidental API expansion easier to review.
 
-### 18.5 Implementation sequence
+### 18.5 Implementation checklist
 
-1. Create `crates/tagpath-core` with its own `Cargo.toml` and `src/lib.rs`.
-2. Move `parser`, `alias`, `family`, `prose`, `query`, and `compression`
-   into the core crate with `git mv`, preserving module names and unit
-   tests.
-3. Add the root `tagpath-core` dependency and replace the moved root
-   modules with named re-exports from `tagpath_core`.
-4. Update native modules that use `crate::{parser, family, ...}` only if
-   the re-exports are insufficient; prefer keeping those paths stable.
-5. Keep `tests/lib_api.rs` as facade compatibility coverage, and add
-   `cargo test -p tagpath-core --no-default-features` to the verification
-   checklist.
-6. Update README and release notes only after the code split is complete.
+1. `crates/tagpath-core` has its own `Cargo.toml` and `src/lib.rs`.
+2. `parser`, `alias`, `family`, `prose`, `query`, and `compression`
+   live in the core crate with preserved module names and unit tests.
+3. The root `tagpath` crate depends on `tagpath-core` and re-exports the
+   moved modules by name from `tagpath_core`.
+4. Native modules continue to use stable `crate::{parser, family, ...}`
+   paths through those re-exports.
+5. `tests/lib_api.rs` remains facade compatibility coverage, and
+   `cargo test -p tagpath-core --no-default-features` is part of the
+   verification checklist.
 
 ### 18.6 Release impact
 

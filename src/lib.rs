@@ -1,9 +1,8 @@
-pub mod alias;
-pub mod compression;
+pub use tagpath_core::{alias, compression, family, parser, prose, query};
+
 pub mod config;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod extract;
-pub mod family;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod graph;
 #[cfg(not(target_arch = "wasm32"))]
@@ -16,9 +15,6 @@ pub mod mcp;
 pub mod meta_index;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod ontology;
-pub mod parser;
-pub mod prose;
-pub mod query;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod rename;
 #[cfg(not(target_arch = "wasm32"))]

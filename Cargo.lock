@@ -707,7 +707,7 @@ dependencies = [
 
 [[package]]
 name = "tagpath"
-version = "0.11.1"
+version = "0.12.0"
 dependencies = [
  "bincode",
  "clap",
@@ -722,6 +722,7 @@ dependencies = [
  "serde-wasm-bindgen",
  "serde_json",
  "sha2",
+ "tagpath-core",
  "toml",
  "tree-sitter",
  "tree-sitter-c",
@@ -740,6 +741,13 @@ dependencies = [
  "tree-sitter-typescript",
  "walkdir",
  "wasm-bindgen",
+]
+
+[[package]]
+name = "tagpath-core"
+version = "0.12.0"
+dependencies = [
+ "serde",
 ]
 
 [[package]]

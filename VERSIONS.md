@@ -1,5 +1,14 @@
 # tagpath versions
 
+## v0.12.0 — Unreleased
+
+### Internal
+
+- Split the pure identifier semantics modules into a new `tagpath-core`
+  workspace crate: parser, alias, family, prose, query normalization, and
+  compression. The root `tagpath` crate remains the CLI/library facade
+  and preserves existing imports such as `tagpath::parser::parse`.
+
 ## v0.11.1 — 2026-05-25
 
 Backwards-compat patch for the agent-doc dialect.

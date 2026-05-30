@@ -10,6 +10,11 @@ Parse, lint, and search tag-based identifiers across languages and naming conven
 cargo install tagpath
 ```
 
+The `tagpath` package is the CLI and compatibility facade. Pure
+identifier semantics are also available as the `tagpath-core` crate for
+library, agent, and wasm-host consumers that do not need filesystem,
+tree-sitter, MCP, watch, or CLI dependencies.
+
 ## Quick Start
 
 ```sh
@@ -157,6 +162,7 @@ For Claude Desktop specifically (`~/Library/Application Support/Claude/claude_de
 ## Features
 
 - **Convention detection** — auto-detects snake_case, camelCase, PascalCase, kebab-case, UPPER_SNAKE_CASE, Ada_Case
+- **Small core crate** — `tagpath-core` exposes parser, alias, family, prose, query normalization, and compression APIs without native or CLI dependencies
 - **Semantic equivalence** — `person_name` = `personName` = `PersonName` → `[person, name]`
 - **Role detection** — `create_*` (factory), `use_*` (hook), `set_*` (setter), `is_*` (predicate), etc.
 - **Shape detection** — `*_a` (array), `*_r` (record), `*_m` (map), `*$` (signal)

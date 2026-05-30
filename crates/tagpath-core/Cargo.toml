@@ -1,0 +1,15 @@
+[package]
+name = "tagpath-core"
+version = "0.12.0"
+edition = "2024"
+description = "Pure identifier semantics for tagpath"
+license = "MIT"
+repository = "https://github.com/btakita/tagpath"
+keywords = ["naming", "convention", "identifier", "parser"]
+categories = ["development-tools"]
+
+[features]
+default = []
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }

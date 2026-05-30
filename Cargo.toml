@@ -1,13 +1,16 @@
 [package]
 name = "tagpath"
-version = "0.11.1"
+version = "0.12.0"
 edition = "2024"
 description = "Tag Path — parse, lint, and search tag-based identifiers across languages"
 license = "MIT"
-license-file = "LICENSE-MIT"
 repository = "https://github.com/btakita/tagpath"
 keywords = ["naming", "convention", "identifier", "parser", "lint"]
 categories = ["command-line-utilities", "development-tools"]
+
+[workspace]
+members = [".", "crates/tagpath-core"]
+resolver = "3"
 
 [lib]
 crate-type = ["cdylib", "rlib"]
@@ -43,6 +46,7 @@ lang-kotlin = ["treesitter", "dep:tree-sitter-kotlin-ng"]
 dyn-grammar = ["treesitter", "dep:libloading", "dep:tree-sitter-language"]
 
 [dependencies]
+tagpath-core = { version = "=0.12.0", path = "crates/tagpath-core" }
 clap = { version = "4", features = ["derive"] }
 regex = "1"
 serde = { version = "1", features = ["derive"] }
