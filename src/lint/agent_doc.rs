@@ -441,8 +441,12 @@ fn check_attr_pairs(
             None => {
                 // A bare `queue` token on `agent:backlog` / `agent:icebox` is the
                 // default-append backlog→queue sync attribute (#backlog-queue-sync-attr),
-                // not a malformed `key=value`.
-                if tok == "queue" && is_backlog_sync_component(component) {
+                // and a bare `priority` token on backlog/icebox/queue is the
+                // priority-ordering attribute (#backlog-priority-attribute) — neither
+                // is a malformed `key=value`.
+                if (tok == "queue" && is_backlog_sync_component(component))
+                    || (tok == "priority" && is_priority_component(component))
+                {
                     continue;
                 }
                 out.push(LintFinding {
@@ -517,16 +521,22 @@ fn is_backlog_sync_component(component: &str) -> bool {
     matches!(component, "agent:backlog" | "agent:icebox")
 }
 
+/// Components that accept the bare `priority` ordering attribute
+/// (`#backlog-priority-attribute`).
+fn is_priority_component(component: &str) -> bool {
+    matches!(component, "agent:backlog" | "agent:icebox" | "agent:queue")
+}
+
 /// Per-component allowed attribute keys.
 fn allowed_attrs(component: &str) -> &'static [&'static str] {
     match component {
         "agent:status" => &["patch"],
         "agent:exchange" => &["patch"],
-        "agent:backlog" => &["patch", "queue"],
+        "agent:backlog" => &["patch", "queue", "priority"],
         "agent:review" => &["patch"],
         "agent:done" => &["archive", "patch"],
-        "agent:icebox" => &["patch", "queue"],
-        "agent:queue" => &["patch"],
+        "agent:icebox" => &["patch", "queue", "priority"],
+        "agent:queue" => &["patch", "priority"],
         _ => &[],
     }
 }
@@ -1037,6 +1047,23 @@ mod tests {
         let text = "<!-- agent:icebox queue=prepend -->\n- [ ] [#a] one\n<!-- /agent:icebox -->\n";
         let findings = lint_str(text);
         assert!(findings.is_empty(), "queue on icebox must be clean: {findings:#?}");
+    }
+
+    #[test]
+    fn priority_attr_ok_on_backlog_icebox_queue() {
+        // #backlog-priority-attribute: bare `priority` is valid on these markers.
+        for text in [
+            "<!-- agent:backlog priority -->\n- [ ] [#a] x\n<!-- /agent:backlog -->\n",
+            "<!-- agent:backlog priority queue -->\n- [ ] [#a] x\n<!-- /agent:backlog -->\n",
+            "<!-- agent:icebox priority -->\n- [ ] [#a] x\n<!-- /agent:icebox -->\n",
+            "<!-- agent:queue priority -->\n- do [#a]\n<!-- /agent:queue -->\n",
+        ] {
+            let findings = lint_str(text);
+            assert!(
+                findings.is_empty(),
+                "priority attr must be clean: {text}\n{findings:#?}"
+            );
+        }
     }
 
     #[test]
