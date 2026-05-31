@@ -1,5 +1,13 @@
 # tagpath versions
 
+## v0.12.1 — 2026-05-31
+
+### Lint rule changes
+
+- `agent-doc/unknown-attr` no longer fires on bare `queue` (backlog/icebox sync attribute), bare `priority` (backlog/icebox/queue ordering attribute), or bare `auto`/`manual` on `agent:queue`.
+- New rule `agent-doc/invalid-attr-value` warns on recognized attributes with unrecognized values (e.g. `queue=nope` on backlog).
+- Allowed attribute keys expanded: `queue` and `priority` on `agent:backlog` and `agent:icebox`; `priority` on `agent:queue`.
+
 ## v0.12.0 — 2026-05-30
 
 ### Internal

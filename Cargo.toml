@@ -1,6 +1,6 @@
 [package]
 name = "tagpath"
-version = "0.12.0"
+version = "0.12.1"
 edition = "2024"
 description = "Tag Path — parse, lint, and search tag-based identifiers across languages"
 license = "MIT"
@@ -46,7 +46,7 @@ lang-kotlin = ["treesitter", "dep:tree-sitter-kotlin-ng"]
 dyn-grammar = ["treesitter", "dep:libloading", "dep:tree-sitter-language"]
 
 [dependencies]
-tagpath-core = { version = "=0.12.0", path = "crates/tagpath-core" }
+tagpath-core = { version = "=0.12.1", path = "crates/tagpath-core" }
 clap = { version = "4", features = ["derive"] }
 regex = "1"
 serde = { version = "1", features = ["derive"] }
