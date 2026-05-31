@@ -439,6 +439,12 @@ fn check_attr_pairs(
     for tok in tokenize_attrs(rest) {
         match tok.split_once('=') {
             None => {
+                // A bare `queue` token on `agent:backlog` / `agent:icebox` is the
+                // default-append backlog→queue sync attribute (#backlog-queue-sync-attr),
+                // not a malformed `key=value`.
+                if tok == "queue" && is_backlog_sync_component(component) {
+                    continue;
+                }
                 out.push(LintFinding {
                     path: path.to_path_buf(),
                     line: c.line,
@@ -464,6 +470,26 @@ fn check_attr_pairs(
                     });
                     continue;
                 }
+                // Validate the backlog→queue sync mode value. The key is allowed
+                // (see `allowed_attrs`); only an unrecognized mode is a finding.
+                if key == "queue" && is_backlog_sync_component(component) {
+                    if !matches!(val, "sync" | "append" | "prepend") {
+                        out.push(LintFinding {
+                            path: path.to_path_buf(),
+                            line: c.line,
+                            col: c.col,
+                            rule: "agent-doc/invalid-attr-value".to_string(),
+                            severity: LintSeverity::Warning,
+                            message: format!(
+                                "queue sync mode `{val}` on `{component}` is not recognized"
+                            ),
+                            fix_hint: Some(
+                                "use `queue=sync`, `queue=append`, or `queue=prepend` (bare `queue` = append)".to_string(),
+                            ),
+                        });
+                    }
+                    continue;
+                }
                 if !allowed.contains(&key) {
                     out.push(LintFinding {
                         path: path.to_path_buf(),
@@ -484,15 +510,22 @@ fn check_attr_pairs(
     }
 }
 
+/// Components that accept the backlog→queue sync `queue` attribute
+/// (`#backlog-queue-sync-attr`): bare `queue` (= append) or
+/// `queue=sync|append|prepend`.
+fn is_backlog_sync_component(component: &str) -> bool {
+    matches!(component, "agent:backlog" | "agent:icebox")
+}
+
 /// Per-component allowed attribute keys.
 fn allowed_attrs(component: &str) -> &'static [&'static str] {
     match component {
         "agent:status" => &["patch"],
         "agent:exchange" => &["patch"],
-        "agent:backlog" => &["patch"],
+        "agent:backlog" => &["patch", "queue"],
         "agent:review" => &["patch"],
         "agent:done" => &["archive", "patch"],
-        "agent:icebox" => &["patch"],
+        "agent:icebox" => &["patch", "queue"],
         "agent:queue" => &["patch"],
         _ => &[],
     }
@@ -972,6 +1005,50 @@ mod tests {
         let text = "<!-- agent:queue auto -->\nx\n<!-- /agent:queue -->\n";
         let findings = lint_str(text);
         assert!(!findings.iter().any(|f| f.severity == LintSeverity::Error));
+    }
+
+    #[test]
+    fn backlog_bare_queue_attr_ok() {
+        // #backlog-queue-sync-attr: bare `queue` (= append) is valid on backlog.
+        let text = "<!-- agent:backlog queue -->\n- [ ] [#a] one\n<!-- /agent:backlog -->\n";
+        let findings = lint_str(text);
+        assert!(
+            findings.is_empty(),
+            "bare `queue` on backlog must be clean: {findings:#?}"
+        );
+    }
+
+    #[test]
+    fn backlog_queue_mode_values_ok() {
+        for mode in ["sync", "append", "prepend"] {
+            let text = format!(
+                "<!-- agent:backlog queue={mode} -->\n- [ ] [#a] one\n<!-- /agent:backlog -->\n"
+            );
+            let findings = lint_str(&text);
+            assert!(
+                findings.is_empty(),
+                "queue={mode} on backlog must be clean: {findings:#?}"
+            );
+        }
+    }
+
+    #[test]
+    fn icebox_queue_attr_ok() {
+        let text = "<!-- agent:icebox queue=prepend -->\n- [ ] [#a] one\n<!-- /agent:icebox -->\n";
+        let findings = lint_str(text);
+        assert!(findings.is_empty(), "queue on icebox must be clean: {findings:#?}");
+    }
+
+    #[test]
+    fn backlog_invalid_queue_mode_warns() {
+        let text = "<!-- agent:backlog queue=nope -->\n- [ ] [#a] one\n<!-- /agent:backlog -->\n";
+        let findings = lint_str(text);
+        let finding = findings
+            .iter()
+            .find(|f| f.rule == "agent-doc/invalid-attr-value")
+            .expect("invalid queue mode should warn");
+        assert_eq!(finding.severity, LintSeverity::Warning);
+        assert!(finding.message.contains("nope"));
     }
 
     #[test]

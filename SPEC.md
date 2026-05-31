@@ -931,6 +931,7 @@ Patch markers (paired): `patch:exchange`, `patch:status`,
 | `agent-doc/malformed-attr`             | error    | attribute token missing `=` (e.g. `archive PATH`)                |
 | `agent-doc/empty-attr-value`           | error    | `key=` with no value (or `key=""`)                               |
 | `agent-doc/unknown-attr`               | warning  | attribute not allowed on this component                          |
+| `agent-doc/invalid-attr-value`         | warning  | recognized attribute with an unrecognized value (e.g. backlog `queue=nope`) |
 | `agent-doc/queue-mode-token`           | error    | `agent:queue mode=auto` instead of bare `agent:queue auto`       |
 | `agent-doc/malformed-boundary`         | error    | `agent:boundary:` not in `<hex>` or `<hex>:<slug>` form          |
 | `agent-doc/unknown-patch-marker`       | warning  | `patch:<name>` not in `exchange/status/backlog/review`           |
