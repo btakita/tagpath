@@ -446,6 +446,7 @@ fn check_attr_pairs(
                 // is a malformed `key=value`.
                 if (tok == "queue" && is_backlog_sync_component(component))
                     || (tok == "priority" && is_priority_component(component))
+                    || (matches!(tok.as_str(), "auto" | "manual") && component == "agent:queue")
                 {
                     continue;
                 }
@@ -1062,6 +1063,23 @@ mod tests {
             assert!(
                 findings.is_empty(),
                 "priority attr must be clean: {text}\n{findings:#?}"
+            );
+        }
+    }
+
+    #[test]
+    fn queue_priority_and_auto_combine_in_any_order() {
+        // The queue marker may carry both `priority` and `auto`; `auto`/`manual`
+        // are valid bare tokens regardless of position (not just first).
+        for text in [
+            "<!-- agent:queue priority auto -->\n- do [#a]\n<!-- /agent:queue -->\n",
+            "<!-- agent:queue auto priority -->\n- do [#a]\n<!-- /agent:queue -->\n",
+            "<!-- agent:queue priority manual -->\n- do [#a]\n<!-- /agent:queue -->\n",
+        ] {
+            let findings = lint_str(text);
+            assert!(
+                !findings.iter().any(|f| f.severity == LintSeverity::Error),
+                "priority+auto/manual must not error: {text}\n{findings:#?}"
             );
         }
     }
