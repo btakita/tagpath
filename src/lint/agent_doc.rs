@@ -116,12 +116,13 @@ struct Comment {
 
 /// Scan all `<!-- ... -->` comments in the source.
 fn scan_comments(text: &str) -> Vec<Comment> {
+    let skip_ranges = find_code_and_fence_ranges(text);
     let mut out = Vec::new();
     let bytes = text.as_bytes();
     let mut i = 0;
     while i + 3 < bytes.len() {
         // look for "<!--"
-        if &bytes[i..i + 4] == b"<!--" {
+        if &bytes[i..i + 4] == b"<!--" && !in_code_range(&skip_ranges, i) {
             let start = i;
             let body_start = i + 4;
             // Find "-->" terminator. If absent, skip to end.
@@ -146,6 +147,71 @@ fn scan_comments(text: &str) -> Vec<Comment> {
         i += 1;
     }
     out
+}
+
+fn find_code_and_fence_ranges(text: &str) -> Vec<(usize, usize)> {
+    let mut ranges = Vec::new();
+    let bytes = text.as_bytes();
+    let len = bytes.len();
+    let mut i = 0;
+    while i < len {
+        if bytes[i] != b'`' {
+            i += 1;
+            continue;
+        }
+        // Count opening backtick run
+        let run_start = i;
+        let mut run_len = 0usize;
+        while i + run_len < len && bytes[i + run_len] == b'`' {
+            run_len += 1;
+        }
+        if run_len >= 3 && (run_start == 0 || bytes[run_start - 1] == b'\n') {
+            // Fenced code block
+            let fence_start = run_start;
+            let fence_len = run_len;
+            let mut j = run_start + fence_len;
+            while j + fence_len <= len {
+                if (j == 0 || bytes[j - 1] == b'\n')
+                    && &bytes[j..j + fence_len] == &bytes[fence_start..fence_start + fence_len]
+                {
+                    ranges.push((fence_start, j + fence_len));
+                    i = j + fence_len;
+                    break;
+                }
+                j += 1;
+            }
+            if j + fence_len > len {
+                ranges.push((fence_start, len));
+                break;
+            }
+            continue;
+        }
+        if run_len >= 1 {
+            // Inline code span: find matching closing run of same length
+            let mut j = run_start + run_len;
+            while j + run_len <= len {
+                if &bytes[j..j + run_len] == &bytes[run_start..run_start + run_len] {
+                    let span_end = j + run_len;
+                    if span_end > run_start + run_len {
+                        ranges.push((run_start, span_end));
+                    }
+                    i = span_end;
+                    break;
+                }
+                j += 1;
+            }
+            if j + run_len > len {
+                i = run_start + run_len;
+            }
+            continue;
+        }
+        i += 1;
+    }
+    ranges
+}
+
+fn in_code_range(ranges: &[(usize, usize)], pos: usize) -> bool {
+    ranges.iter().any(|&(start, end)| pos >= start && pos < end)
 }
 
 fn byte_to_line_col(text: &str, byte_offset: usize) -> (usize, usize) {
@@ -537,7 +603,7 @@ fn allowed_attrs(component: &str) -> &'static [&'static str] {
         "agent:review" => &["patch"],
         "agent:done" => &["archive", "patch"],
         "agent:icebox" => &["patch", "queue", "priority"],
-        "agent:queue" => &["patch", "priority"],
+        "agent:queue" => &["patch", "priority", "auto", "preset"],
         _ => &[],
     }
 }
@@ -1314,19 +1380,49 @@ content
         );
     }
 
-    #[test]
-    fn rule_filter_restricts_findings() {
-        let text = "<!-- agent:bogus -->\n<!-- agent:done archive bad -->\n<!-- /agent:done -->\n";
-        let opts = AgentDocOptions {
-            rule_filter: vec!["agent-doc/malformed-attr".to_string()],
-            ..Default::default()
-        };
-        let findings = lint_agent_doc(Path::new("test.md"), text, &opts);
-        assert!(
-            findings
-                .iter()
-                .all(|f| f.rule == "agent-doc/malformed-attr")
-        );
-        assert!(!findings.is_empty());
-    }
-}
+     #[test]
+     fn rule_filter_restricts_findings() {
+         let text = "<!-- agent:bogus -->\n<!-- agent:done archive bad -->\n<!-- /agent:done -->\n";
+         let opts = AgentDocOptions {
+             rule_filter: vec!["agent-doc/malformed-attr".to_string()],
+             ..Default::default()
+         };
+         let findings = lint_agent_doc(Path::new("test.md"), text, &opts);
+         assert!(
+             findings
+                 .iter()
+                 .all(|f| f.rule == "agent-doc/malformed-attr")
+         );
+         assert!(!findings.is_empty());
+     }
+
+     #[test]
+     fn html_comment_inside_inline_code_not_parsed() {
+         let text = "<!-- agent:backlog priority queue -->\n- item with `<!-- agent:backlog queue -->` reference\n<!-- /agent:backlog -->\n";
+         let findings = lint_str(text);
+         assert!(
+             findings.is_empty(),
+             "backtick-wrapped component tag must not be treated as a real component: {findings:#?}"
+         );
+     }
+
+     #[test]
+     fn html_comment_inside_double_backtick_not_parsed() {
+         let text = "<!-- agent:backlog priority queue -->\n- item with `` `<!-- agent:backlog queue -->` `` reference\n<!-- /agent:backlog -->\n";
+         let findings = lint_str(text);
+         assert!(
+             findings.is_empty(),
+             "double-backtick-wrapped component tag must not be treated as a real component: {findings:#?}"
+         );
+     }
+
+     #[test]
+     fn html_comment_inside_code_fence_not_parsed() {
+         let text = "<!-- agent:exchange patch=append -->\n```\n<!-- agent:backlog queue -->\n```\n<!-- /agent:exchange -->\n";
+         let findings = lint_str(text);
+         assert!(
+             findings.is_empty(),
+             "fenced code block must not be treated as real components: {findings:#?}"
+         );
+     }
+ }
