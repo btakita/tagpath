@@ -115,29 +115,39 @@ struct Comment {
 }
 
 /// Scan all `<!-- ... -->` comments in the source.
+///
+/// Code-span filtering suppresses comments inside inline code spans, but
+/// only for short same-line spans. Multi-line code spans created by
+/// unpaired backticks in queue/review/backlog content must not suppress
+/// real structural component tags.
 fn scan_comments(text: &str) -> Vec<Comment> {
-    let skip_ranges = find_code_and_fence_ranges(text);
+    let code_ranges = find_code_and_fence_ranges(text);
     let mut out = Vec::new();
     let bytes = text.as_bytes();
     let mut i = 0;
     while i + 3 < bytes.len() {
-        // look for "<!--"
-        if &bytes[i..i + 4] == b"<!--" && !in_code_range(&skip_ranges, i) {
+        if &bytes[i..i + 4] == b"<!--" {
             let start = i;
             let body_start = i + 4;
-            // Find "-->" terminator. If absent, skip to end.
-            let rest = &text[body_start..];
-            if let Some(rel_end) = rest.find("-->") {
-                let body = rest[..rel_end].trim().to_string();
+            if let Some(rel_end) = text[body_start..].find("-->") {
+                let body = text[body_start..body_start + rel_end].trim().to_string();
                 let byte_end = body_start + rel_end + 3;
-                let (line, col) = byte_to_line_col(text, start);
-                out.push(Comment {
-                    line,
-                    col,
-                    body,
-                    byte_start: start,
-                    byte_end,
-                });
+                let in_code = in_code_range(&code_ranges, i);
+                let suppress = if in_code {
+                    should_suppress_in_code(text, i, &code_ranges)
+                } else {
+                    false
+                };
+                if !suppress {
+                    let (line, col) = byte_to_line_col(text, start);
+                    out.push(Comment {
+                        line,
+                        col,
+                        body,
+                        byte_start: start,
+                        byte_end,
+                    });
+                }
                 i = byte_end;
                 continue;
             } else {
@@ -147,6 +157,21 @@ fn scan_comments(text: &str) -> Vec<Comment> {
         i += 1;
     }
     out
+}
+
+fn should_suppress_in_code(text: &str, pos: usize, code_ranges: &[(usize, usize)]) -> bool {
+    for &(start, end) in code_ranges {
+        if pos >= start && pos < end {
+            let span_text = &text[start..end.min(text.len())];
+            let is_fence = span_text.starts_with("```");
+            if is_fence {
+                return true;
+            }
+            let newlines = span_text.chars().filter(|&c| c == '\n').count();
+            return newlines == 0;
+        }
+    }
+    false
 }
 
 fn find_code_and_fence_ranges(text: &str) -> Vec<(usize, usize)> {
@@ -172,7 +197,7 @@ fn find_code_and_fence_ranges(text: &str) -> Vec<(usize, usize)> {
             let mut j = run_start + fence_len;
             while j + fence_len <= len {
                 if (j == 0 || bytes[j - 1] == b'\n')
-                    && &bytes[j..j + fence_len] == &bytes[fence_start..fence_start + fence_len]
+                    && bytes[j..j + fence_len] == bytes[fence_start..fence_start + fence_len]
                 {
                     ranges.push((fence_start, j + fence_len));
                     i = j + fence_len;
@@ -190,7 +215,7 @@ fn find_code_and_fence_ranges(text: &str) -> Vec<(usize, usize)> {
             // Inline code span: find matching closing run of same length
             let mut j = run_start + run_len;
             while j + run_len <= len {
-                if &bytes[j..j + run_len] == &bytes[run_start..run_start + run_len] {
+                if bytes[j..j + run_len] == bytes[run_start..run_start + run_len] {
                     let span_end = j + run_len;
                     if span_end > run_start + run_len {
                         ranges.push((run_start, span_end));
@@ -1425,4 +1450,33 @@ content
              "fenced code block must not be treated as real components: {findings:#?}"
          );
      }
+
+    #[test]
+    fn backticks_in_queue_content_do_not_hide_component_tags() {
+        let text = "\
+<!-- agent:exchange patch=append -->
+content
+<!-- agent:boundary:abc12345 -->
+<!-- /agent:exchange -->
+
+<!-- agent:queue auto -->
+- item with `unpaired backtick that would normally span
+  across lines and cover the next component tag
+- another `matched pair` here
+<!-- /agent:queue -->
+
+<!-- agent:review -->
+- [/] [#test] description with `backticks` in it
+<!-- /agent:review -->
+
+<!-- agent:backlog -->
+- [ ] [#abc] item
+<!-- /agent:backlog -->
+";
+        let findings = lint_str(text);
+        assert!(
+            findings.is_empty(),
+            "backticks in queue/review/backlog content must not hide component tags: {findings:#?}"
+        );
+    }
  }
