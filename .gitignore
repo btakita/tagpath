@@ -7,3 +7,4 @@
 /pkg-nodejs
 /pkg-web
 /pkg-smoke/node_modules
+.tsift/
