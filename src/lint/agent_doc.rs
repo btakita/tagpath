@@ -482,9 +482,10 @@ fn check_attrs(path: &Path, c: &Comment, component: &str, rest: &str, out: &mut 
             });
             return;
         }
-        // First token must be `auto`, `manual`, or a key=value attribute.
+        // First token must be `auto`, `manual`, a `start`/`go`/`stop` queue
+        // control marker (#queue-state-unify), or a key=value attribute.
         let first = tokens[0];
-        if matches!(first, "auto" | "manual") {
+        if matches!(first, "auto" | "manual" | "start" | "go" | "stop") {
             // Skip the bare token; continue with the remainder as attrs.
             let rest_after = rest.trim_start();
             let rest_after = rest_after.strip_prefix(first).unwrap_or(rest_after);
@@ -537,7 +538,8 @@ fn check_attr_pairs(
                 // is a malformed `key=value`.
                 if (tok == "queue" && is_backlog_sync_component(component))
                     || (tok == "priority" && is_priority_component(component))
-                    || (matches!(tok.as_str(), "auto" | "manual") && component == "agent:queue")
+                    || (matches!(tok.as_str(), "auto" | "manual" | "start" | "go" | "stop")
+                        && component == "agent:queue")
                 {
                     continue;
                 }
@@ -628,7 +630,7 @@ fn allowed_attrs(component: &str) -> &'static [&'static str] {
         "agent:review" => &["patch"],
         "agent:done" => &["archive", "patch"],
         "agent:icebox" => &["patch", "queue", "priority"],
-        "agent:queue" => &["patch", "priority", "auto", "preset"],
+        "agent:queue" => &["patch", "priority", "auto", "preset", "start", "go", "stop"],
         _ => &[],
     }
 }
@@ -1107,6 +1109,26 @@ mod tests {
         let text = "<!-- agent:queue auto -->\nx\n<!-- /agent:queue -->\n";
         let findings = lint_str(text);
         assert!(!findings.iter().any(|f| f.severity == LintSeverity::Error));
+    }
+
+    #[test]
+    fn queue_bare_control_markers_ok() {
+        // #queue-state-unify: `start`/`go`/`stop` are valid bare queue control
+        // markers, both as the sole token and alongside a preset.
+        for tok in ["start", "go", "stop"] {
+            for text in [
+                format!("<!-- agent:queue {tok} -->\nx\n<!-- /agent:queue -->\n"),
+                format!(
+                    "<!-- agent:queue preset=\"#p\" {tok} -->\n- do [#a]\n<!-- /agent:queue -->\n"
+                ),
+            ] {
+                let findings = lint_str(&text);
+                assert!(
+                    !findings.iter().any(|f| f.severity == LintSeverity::Error),
+                    "`{tok}` on agent:queue must be clean: {findings:#?}"
+                );
+            }
+        }
     }
 
     #[test]
