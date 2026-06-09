@@ -1198,6 +1198,23 @@ mod tests {
     }
 
     #[test]
+    fn queue_priority_preset_go_marker_is_fully_clean() {
+        // #tagpath-queue-lint-falsepos: the real go-mode preset-queue marker
+        // combines all three control tokens — `priority` (bare ordering attr),
+        // `preset="#name"` (key=value, recognized), and `go` (bare control
+        // marker). It must produce ZERO findings (not even an unknown-attr
+        // warning on `preset`). A published tagpath that flagged `go`
+        // (malformed-attr, error) or `preset` (unknown-attr) blocked agent-doc
+        // finalize for every go-mode preset queue.
+        let text = "<!-- agent:queue priority preset=\"#spec-test-build-install-commit-push\" go -->\n- do [#a]\n<!-- /agent:queue -->\n";
+        let findings = lint_str(text);
+        assert!(
+            findings.is_empty(),
+            "priority+preset+go queue marker must be fully clean (no error or warning): {findings:#?}"
+        );
+    }
+
+    #[test]
     fn backlog_invalid_queue_mode_warns() {
         let text = "<!-- agent:backlog queue=nope -->\n- [ ] [#a] one\n<!-- /agent:backlog -->\n";
         let findings = lint_str(text);

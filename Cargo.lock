@@ -707,7 +707,7 @@ dependencies = [
 
 [[package]]
 name = "tagpath"
-version = "0.12.1"
+version = "0.12.2"
 dependencies = [
  "bincode",
  "clap",
@@ -745,7 +745,7 @@ dependencies = [
 
 [[package]]
 name = "tagpath-core"
-version = "0.12.1"
+version = "0.12.2"
 dependencies = [
  "serde",
 ]

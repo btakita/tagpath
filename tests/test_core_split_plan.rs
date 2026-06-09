@@ -43,7 +43,7 @@ fn workspace_manifest_contains_core_dependency_boundary() {
     let root_manifest = include_str!("../Cargo.toml");
     assert!(root_manifest.contains("members = [\".\", \"crates/tagpath-core\"]"));
     assert!(root_manifest
-        .contains("tagpath-core = { version = \"=0.12.1\", path = \"crates/tagpath-core\" }"));
+        .contains("tagpath-core = { version = \"=0.12.2\", path = \"crates/tagpath-core\" }"));
 
     let core_manifest = include_str!("../crates/tagpath-core/Cargo.toml");
     assert!(core_manifest.contains("name = \"tagpath-core\""));
@@ -73,7 +73,7 @@ fn root_manifest_preserves_facade_package_shape_and_feature_defaults() {
     let root_manifest = include_str!("../Cargo.toml");
     for required in [
         "name = \"tagpath\"",
-        "version = \"0.12.1\"",
+        "version = \"0.12.2\"",
         "crate-type = [\"cdylib\", \"rlib\"]",
         "name = \"tagpath\"\npath = \"src/main.rs\"",
         "required-features = [\"treesitter\"]",
