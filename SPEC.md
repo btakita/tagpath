@@ -1085,6 +1085,41 @@ negotiation handshake, persist the `project_root` + `tool_version` for
 log correlation, and reset any local handle cache when
 `schema_version` differs from the last-seen value.
 
+### 17.7 Performance baseline matrix
+
+Before introducing a project-session cache or a lazily-evaluated
+invalidation layer, measure the current public behavior with:
+
+```bash
+scripts/benchmark-current-performance.sh
+```
+
+The script builds the current `target/debug/tagpath` binary unless
+`TAGPATH_BIN` points at an existing executable, creates a synthetic
+1000-file Rust project, primes `.naming/index.json` and
+`.naming/index.bincache`, and prints CSV timing rows. `--plan` prints
+the command matrix without building or running the benchmark; tests use
+that mode to keep this section synchronized.
+
+Target budgets are intentionally conservative for the debug binary on a
+developer workstation. Lazier project/session work may change the
+implementation, but it should not regress these median timings without a
+documented tradeoff:
+
+| Case | Target median | Command path |
+|---|---:|---|
+| `noop_sidecar_update` | <= 10 ms | `TAGPATH_QUIET=1 tagpath index --update "$fixture"` after the sidecar exists. |
+| `one_changed_file_update` | <= 125 ms | Append one Rust function, then run `TAGPATH_QUIET=1 tagpath index --update "$fixture"`. |
+| `full_reindex` | <= 450 ms | `TAGPATH_QUIET=1 tagpath index --update --force-full "$fixture"`. |
+| `watch_save_burst` | <= 500 ms | Start `tagpath watch "$fixture" --no-lint --emit-shape compact`, write a five-save burst, and wait for the next `index_update`. |
+| `mcp_indexed_project_query` | <= 150 ms | Send a `tools/call` request for `indexed_project_query` through `tagpath mcp`. |
+| `mcp_family_by_path_read` | <= 150 ms | Send a `tools/call` request for `family_by_path` through `tagpath mcp`. |
+
+The watch budget measures wall time from the first write in the save
+burst until the next `index_update`, so it includes the configured
+150 ms debounce window. The other rows measure process wall time for
+the stated command path, including CLI or MCP process startup.
+
 ## 18. Workspace split
 
 The first crate split is a conservative `tagpath-core` extraction. The

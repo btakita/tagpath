@@ -479,6 +479,21 @@ External tools (tsift, agent-doc, custom pipelines) can consume the
 See SPEC.md §15 for the full wire contract, freshness model, and
 recommended consumer pattern.
 
+## Performance Baseline
+
+Before changing the project/session invalidation layer, capture the
+current index, watch, and MCP envelope:
+
+```sh
+scripts/benchmark-current-performance.sh
+```
+
+The benchmark emits CSV rows for no-op sidecar updates, one-file
+incremental updates, full reindexing, watch save bursts, and MCP
+query/read calls. `scripts/benchmark-current-performance.sh --plan`
+prints the command matrix without running it. SPEC.md §17.7 records the
+target median budgets.
+
 ## Roadmap
 
 - **Phase 1** ✅ — Parse, detect conventions, semantic equivalence
