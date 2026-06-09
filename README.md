@@ -503,6 +503,21 @@ search, and lint state in the root facade:
 cargo test --features project-session --test test_project_session
 ```
 
+The prototype is also exercised through opt-in MCP reads when the binary
+is built with `--features project-session`: pass
+`runtime: "project_session"` to `indexed_project_query` or
+`family_by_path`. To compare that branch against the baseline rows:
+
+```sh
+scripts/benchmark-current-performance.sh --project-session
+```
+
+On the 1000-file debug fixture, the 2026-06-09 run kept the default
+sidecar no-op row under budget (7 ms median) but measured the opt-in
+ProjectSession MCP reads at 348 ms for `indexed_project_query`, 284 ms
+for `family_by_path`, and 389 ms for a five-save burst followed by an MCP
+read.
+
 ## Roadmap
 
 - **Phase 1** ✅ — Parse, detect conventions, semantic equivalence

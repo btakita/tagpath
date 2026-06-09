@@ -8,10 +8,11 @@ ITERATIONS="${TAGPATH_BENCH_ITERATIONS:-5}"
 FIXTURE_FILES="${TAGPATH_BENCH_FILES:-1000}"
 KEEP_FIXTURE="${TAGPATH_BENCH_KEEP:-0}"
 MODE="run"
+PROJECT_SESSION="0"
 
 usage() {
 	cat <<'USAGE'
-Usage: scripts/benchmark-current-performance.sh [--plan] [--iterations N] [--files N]
+Usage: scripts/benchmark-current-performance.sh [--plan] [--project-session] [--iterations N] [--files N]
 
 Builds the current tagpath binary, creates a synthetic Rust project, and measures:
   - noop_sidecar_update
@@ -20,6 +21,9 @@ Builds the current tagpath binary, creates a synthetic Rust project, and measure
   - watch_save_burst
   - mcp_indexed_project_query
   - mcp_family_by_path_read
+  - project_session_mcp_indexed_project_query (--project-session)
+  - project_session_mcp_family_by_path_read (--project-session)
+  - project_session_save_burst_mcp_read (--project-session)
 
 Environment:
   TAGPATH_BIN             Existing tagpath binary to use instead of target/debug/tagpath
@@ -34,6 +38,10 @@ while [[ $# -gt 0 ]]; do
 	case "$1" in
 		--plan)
 			MODE="plan"
+			shift
+			;;
+		--project-session)
+			PROJECT_SESSION="1"
 			shift
 			;;
 		--iterations)
@@ -66,6 +74,13 @@ watch_save_burst,500,tagpath watch "$fixture" --no-lint --emit-shape compact; wr
 mcp_indexed_project_query,150,printf tools/call indexed_project_query | tagpath mcp
 mcp_family_by_path_read,150,printf tools/call family_by_path | tagpath mcp
 PLAN
+	if [[ "$PROJECT_SESSION" == "1" ]]; then
+		cat <<'PLAN'
+project_session_mcp_indexed_project_query,400,printf tools/call indexed_project_query runtime=project_session | tagpath mcp
+project_session_mcp_family_by_path_read,350,printf tools/call family_by_path runtime=project_session | tagpath mcp
+project_session_save_burst_mcp_read,500,write a five-save burst; printf tools/call family_by_path runtime=project_session | tagpath mcp
+PLAN
+	fi
 }
 
 if [[ "$MODE" == "plan" ]]; then
@@ -85,7 +100,11 @@ fi
 
 TAGPATH_BIN="${TAGPATH_BIN:-}"
 if [[ -z "$TAGPATH_BIN" ]]; then
-	( cd "$REPO_ROOT" && cargo build --quiet --bin tagpath )
+	if [[ "$PROJECT_SESSION" == "1" ]]; then
+		( cd "$REPO_ROOT" && cargo build --quiet --bin tagpath --features project-session )
+	else
+		( cd "$REPO_ROOT" && cargo build --quiet --bin tagpath )
+	fi
 	TAGPATH_BIN="$REPO_ROOT/target/debug/tagpath"
 fi
 
@@ -257,6 +276,29 @@ bench_mcp_family_by_path_read() {
 		| "$TAGPATH_BIN" mcp >/dev/null
 }
 
+bench_project_session_mcp_indexed_project_query() {
+	printf '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"indexed_project_query","arguments":{"path":"%s","tag":"user","runtime":"project_session"}}}\n' "$ROOT" \
+		| "$TAGPATH_BIN" mcp >/dev/null
+}
+
+bench_project_session_mcp_family_by_path_read() {
+	printf '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"family_by_path","arguments":{"path":"%s","project_root":"%s","runtime":"project_session"}}}\n' "$ROOT/src/file_0001.rs" "$ROOT" \
+		| "$TAGPATH_BIN" mcp >/dev/null
+}
+
+bench_project_session_save_burst_mcp_read() {
+	local sample="$1"
+	local start end
+	start="$(now_ms)"
+	for n in 1 2 3 4 5; do
+		printf '\npub fn session_burst_user_%s_%s() -> usize { %s }\n' "$sample" "$n" "$n" >> "$ROOT/src/file_0003.rs"
+		sleep 0.02
+	done
+	bench_project_session_mcp_family_by_path_read
+	end="$(now_ms)"
+	echo $((end - start))
+}
+
 run_samples() {
 	local case_name="$1"
 	local budget_ms="$2"
@@ -265,6 +307,8 @@ run_samples() {
 	local i elapsed
 	for ((i = 1; i <= ITERATIONS; i++)); do
 		if [[ "$fn_name" == "bench_watch_save_burst" ]]; then
+			elapsed="$("$fn_name" "$i")"
+		elif [[ "$fn_name" == "bench_project_session_save_burst_mcp_read" ]]; then
 			elapsed="$("$fn_name" "$i")"
 		elif [[ "$fn_name" == "bench_one_changed_file_update" ]]; then
 			elapsed="$(measure_ms "$fn_name" "$i")"
@@ -291,3 +335,8 @@ run_samples "full_reindex" 450 "bench_full_reindex"
 run_samples "watch_save_burst" 500 "bench_watch_save_burst"
 run_samples "mcp_indexed_project_query" 150 "bench_mcp_indexed_project_query"
 run_samples "mcp_family_by_path_read" 150 "bench_mcp_family_by_path_read"
+if [[ "$PROJECT_SESSION" == "1" ]]; then
+	run_samples "project_session_mcp_indexed_project_query" 400 "bench_project_session_mcp_indexed_project_query"
+	run_samples "project_session_mcp_family_by_path_read" 350 "bench_project_session_mcp_family_by_path_read"
+	run_samples "project_session_save_burst_mcp_read" 500 "bench_project_session_save_burst_mcp_read"
+fi

@@ -29,6 +29,24 @@ const ERROR_METHOD_NOT_FOUND: i64 = -32601;
 /// JSON-RPC 2.0 error: invalid params.
 const ERROR_INVALID_PARAMS: i64 = -32602;
 
+#[derive(Default)]
+struct McpRuntimeState {
+    #[cfg(all(feature = "project-session", not(target_arch = "wasm32")))]
+    project_sessions: std::collections::BTreeMap<PathBuf, crate::project_session::ProjectSession>,
+}
+
+#[cfg(all(feature = "project-session", not(target_arch = "wasm32")))]
+impl McpRuntimeState {
+    fn project_session(&mut self, project_root: &Path) -> &crate::project_session::ProjectSession {
+        let key = project_root
+            .canonicalize()
+            .unwrap_or_else(|_| project_root.to_path_buf());
+        self.project_sessions
+            .entry(key.clone())
+            .or_insert_with(|| crate::project_session::ProjectSession::new(key))
+    }
+}
+
 /// Entry point for `tagpath mcp`. Reads JSON-RPC requests from stdin one
 /// line at a time, dispatches them, and writes responses (also one line each)
 /// to stdout. Returns when stdin closes.
@@ -37,6 +55,7 @@ pub fn run() -> std::io::Result<()> {
     let mut stdin = BufReader::new(stdin.lock());
     let stdout = std::io::stdout();
     let mut stdout = stdout.lock();
+    let mut state = McpRuntimeState::default();
 
     let mut line = String::new();
     loop {
@@ -49,7 +68,7 @@ pub fn run() -> std::io::Result<()> {
         if trimmed.is_empty() {
             continue;
         }
-        let response_opt = handle_line(trimmed);
+        let response_opt = handle_line_with_state(trimmed, &mut state);
         if let Some(response) = response_opt {
             let mut payload = serde_json::to_string(&response)
                 .unwrap_or_else(|_| r#"{"jsonrpc":"2.0","id":null,"error":{"code":-32603,"message":"failed to serialize response"}}"#.to_string());
@@ -63,7 +82,13 @@ pub fn run() -> std::io::Result<()> {
 
 /// Parse a single JSON-RPC line and produce the response value (or `None`
 /// for notifications that require no reply).
+#[cfg(test)]
 fn handle_line(line: &str) -> Option<Value> {
+    let mut state = McpRuntimeState::default();
+    handle_line_with_state(line, &mut state)
+}
+
+fn handle_line_with_state(line: &str, state: &mut McpRuntimeState) -> Option<Value> {
     let parsed: Value = match serde_json::from_str(line) {
         Ok(v) => v,
         Err(e) => {
@@ -99,7 +124,7 @@ fn handle_line(line: &str) -> Option<Value> {
     let is_notification = !obj.contains_key("id");
     let params = obj.get("params").cloned().unwrap_or(Value::Null);
 
-    let outcome = dispatch(&method, &params);
+    let outcome = dispatch(&method, &params, state);
     if is_notification {
         return None;
     }
@@ -110,7 +135,11 @@ fn handle_line(line: &str) -> Option<Value> {
 }
 
 /// Dispatch a request method to its handler.
-fn dispatch(method: &str, params: &Value) -> Result<Value, (i64, String)> {
+fn dispatch(
+    method: &str,
+    params: &Value,
+    state: &mut McpRuntimeState,
+) -> Result<Value, (i64, String)> {
     match method {
         "initialize" => Ok(json!({
             "protocolVersion": PROTOCOL_VERSION,
@@ -121,7 +150,7 @@ fn dispatch(method: &str, params: &Value) -> Result<Value, (i64, String)> {
             },
         })),
         "tools/list" => Ok(json!({ "tools": tools::definitions() })),
-        "tools/call" => handle_tools_call(params),
+        "tools/call" => handle_tools_call(params, state),
         // Generic ping support is common in MCP harnesses.
         "ping" => Ok(json!({})),
         // Notifications/* are accepted silently (caller distinguishes via id).
@@ -130,7 +159,7 @@ fn dispatch(method: &str, params: &Value) -> Result<Value, (i64, String)> {
     }
 }
 
-fn handle_tools_call(params: &Value) -> Result<Value, (i64, String)> {
+fn handle_tools_call(params: &Value, state: &mut McpRuntimeState) -> Result<Value, (i64, String)> {
     let obj = params.as_object().ok_or((
         ERROR_INVALID_PARAMS,
         "tools/call params must be an object".to_string(),
@@ -146,8 +175,8 @@ fn handle_tools_call(params: &Value) -> Result<Value, (i64, String)> {
         "lint" => tool_lint(&args),
         "search" => tool_search(&args),
         "ontology_lookup" => tool_ontology_lookup(&args),
-        "indexed_project_query" => tool_indexed_project_query(&args),
-        "family_by_path" => tool_family_by_path(&args),
+        "indexed_project_query" => tool_indexed_project_query(&args, state),
+        "family_by_path" => tool_family_by_path(&args, state),
         "lint_session_doc" => tool_lint_session_doc(&args),
         "index_handle" => tool_index_handle(&args),
         other => {
@@ -188,6 +217,26 @@ fn error_content(message: String) -> Value {
 }
 
 // ---------- tool handlers ----------
+
+fn wants_project_session_runtime(args: &Value) -> Result<bool, String> {
+    match args.get("runtime").and_then(Value::as_str) {
+        None | Some("index") => Ok(false),
+        Some("project_session") => wants_project_session_runtime_enabled(),
+        Some(other) => Err(format!(
+            "unsupported runtime: {other} (expected index or project_session)"
+        )),
+    }
+}
+
+#[cfg(all(feature = "project-session", not(target_arch = "wasm32")))]
+fn wants_project_session_runtime_enabled() -> Result<bool, String> {
+    Ok(true)
+}
+
+#[cfg(not(all(feature = "project-session", not(target_arch = "wasm32"))))]
+fn wants_project_session_runtime_enabled() -> Result<bool, String> {
+    Err("project_session runtime requires the `project-session` Cargo feature".to_string())
+}
 
 fn tool_parse(args: &Value) -> Result<Value, String> {
     let name = args
@@ -282,7 +331,21 @@ fn tool_ontology_lookup(args: &Value) -> Result<Value, String> {
     serde_json::to_value(&report).map_err(|e| format!("serialize: {e}"))
 }
 
-fn tool_indexed_project_query(args: &Value) -> Result<Value, String> {
+fn tool_indexed_project_query(args: &Value, state: &mut McpRuntimeState) -> Result<Value, String> {
+    #[cfg(not(all(feature = "project-session", not(target_arch = "wasm32"))))]
+    let _ = state;
+
+    if wants_project_session_runtime(args)? {
+        #[cfg(all(feature = "project-session", not(target_arch = "wasm32")))]
+        {
+            return tool_indexed_project_query_project_session(args, state);
+        }
+        #[cfg(not(all(feature = "project-session", not(target_arch = "wasm32"))))]
+        {
+            unreachable!("wants_project_session_runtime returns an error without the feature");
+        }
+    }
+
     let path_str = args
         .get("path")
         .and_then(Value::as_str)
@@ -364,7 +427,21 @@ fn tool_indexed_project_query(args: &Value) -> Result<Value, String> {
     }))
 }
 
-fn tool_family_by_path(args: &Value) -> Result<Value, String> {
+fn tool_family_by_path(args: &Value, state: &mut McpRuntimeState) -> Result<Value, String> {
+    #[cfg(not(all(feature = "project-session", not(target_arch = "wasm32"))))]
+    let _ = state;
+
+    if wants_project_session_runtime(args)? {
+        #[cfg(all(feature = "project-session", not(target_arch = "wasm32")))]
+        {
+            return tool_family_by_path_project_session(args, state);
+        }
+        #[cfg(not(all(feature = "project-session", not(target_arch = "wasm32"))))]
+        {
+            unreachable!("wants_project_session_runtime returns an error without the feature");
+        }
+    }
+
     let path_str = args
         .get("path")
         .and_then(Value::as_str)
@@ -481,6 +558,278 @@ fn tool_family_by_path(args: &Value) -> Result<Value, String> {
     }
 
     Ok(serde_json::json!({ "families": matched }))
+}
+
+#[cfg(all(feature = "project-session", not(target_arch = "wasm32")))]
+fn tool_indexed_project_query_project_session(
+    args: &Value,
+    state: &mut McpRuntimeState,
+) -> Result<Value, String> {
+    let path_str = args
+        .get("path")
+        .and_then(Value::as_str)
+        .ok_or_else(|| "missing argument: path".to_string())?;
+    let tag = args.get("tag").and_then(Value::as_str);
+    let convention = args.get("convention").and_then(Value::as_str);
+    let role = args.get("role").and_then(Value::as_str);
+    let shape = args.get("shape").and_then(Value::as_str);
+    let path = PathBuf::from(path_str);
+    let project_root = index::find_project_root(&path)
+        .ok_or_else(|| format!("no .naming.toml found from {}", path.display()))?;
+
+    let canonical_root = canonical_project_root_for_handles(&project_root);
+    let session = state.project_session(&project_root);
+    session.refresh();
+    let ontology_refs = project_session_ontology_refs(session, &project_root);
+    let sidecar = project_session_sidecar_json(session);
+    let family_map = session.family_map();
+    let mut families = Vec::new();
+
+    for (family_id, family) in &family_map.families {
+        if let Some(tag) = tag
+            && !family.tags.iter().any(|candidate| candidate == tag)
+        {
+            continue;
+        }
+        let family_handle = index::family_handle(&canonical_root, &family.tags, &ontology_refs);
+        let members: Vec<Value> = family
+            .members
+            .iter()
+            .filter(|member| project_session_member_matches(member, convention, role, shape))
+            .map(|member| {
+                let rel_path = project_relative_path(&member.path, &project_root);
+                let member_handle = index::member_handle(&family_handle, &member.name, &rel_path);
+                json!({
+                    "handle": member_handle,
+                    "family_handle": family_handle,
+                    "name": member.name,
+                    "convention": member.convention,
+                    "path": rel_path,
+                    "line": member.line,
+                })
+            })
+            .collect();
+        if members.is_empty() {
+            continue;
+        }
+        families.push(json!({
+            "handle": family_handle,
+            "family_id": family_id,
+            "tags": family.tags,
+            "members": members,
+        }));
+    }
+
+    Ok(json!({
+        "runtime": "project_session",
+        "project_root": project_root.display().to_string(),
+        "family_count": families.len(),
+        "families": families,
+        "sidecar": sidecar,
+    }))
+}
+
+#[cfg(all(feature = "project-session", not(target_arch = "wasm32")))]
+fn tool_family_by_path_project_session(
+    args: &Value,
+    state: &mut McpRuntimeState,
+) -> Result<Value, String> {
+    let path_str = args
+        .get("path")
+        .and_then(Value::as_str)
+        .ok_or_else(|| "missing argument: path".to_string())?;
+    let input_path = PathBuf::from(path_str);
+    let project_root = if let Some(pr) = args.get("project_root").and_then(Value::as_str) {
+        PathBuf::from(pr)
+    } else {
+        let anchor = if input_path.exists() {
+            input_path.clone()
+        } else {
+            input_path
+                .parent()
+                .map(Path::to_path_buf)
+                .unwrap_or_else(|| PathBuf::from("."))
+        };
+        index::find_project_root(&anchor).ok_or_else(|| {
+            format!(
+                "no .naming.toml found from {} (pass project_root)",
+                anchor.display()
+            )
+        })?
+    };
+
+    let canonical_root = canonical_project_root_for_handles(&project_root);
+    let rel_input = project_relative_path(&input_path, &project_root);
+    let session = state.project_session(&project_root);
+    session.refresh();
+    let sidecar = project_session_sidecar_json(session);
+    let tracked = session
+        .source_files()
+        .iter()
+        .any(|path| project_relative_path(path, &project_root) == rel_input);
+    if !tracked {
+        return Ok(json!({
+            "runtime": "project_session",
+            "project_root": project_root.display().to_string(),
+            "sidecar": sidecar,
+            "families": [],
+            "diagnostic": "path_not_in_index",
+        }));
+    }
+
+    let ontology_refs = project_session_ontology_refs(session, &project_root);
+    let family_map = session.family_map();
+    let mut matched = Vec::new();
+    for (family_id, family) in &family_map.families {
+        let members: Vec<Value> = family
+            .members
+            .iter()
+            .filter(|member| project_relative_path(&member.path, &project_root) == rel_input)
+            .map(|member| {
+                let rel_path = project_relative_path(&member.path, &project_root);
+                let family_handle =
+                    index::family_handle(&canonical_root, &family.tags, &ontology_refs);
+                let member_handle = index::member_handle(&family_handle, &member.name, &rel_path);
+                json!({
+                    "name": member.name,
+                    "convention": member.convention,
+                    "line": member.line,
+                    "member_handle": member_handle,
+                })
+            })
+            .collect();
+        if members.is_empty() {
+            continue;
+        }
+        let family_handle = index::family_handle(&canonical_root, &family.tags, &ontology_refs);
+        let mut matching_refs: Vec<&index::OntologyRef> = ontology_refs
+            .iter()
+            .filter(|ontology_ref| family.tags.iter().any(|tag| tag == &ontology_ref.tag))
+            .collect();
+        matching_refs.sort_by(|a, b| a.tag.cmp(&b.tag));
+        matched.push(json!({
+            "family_handle": family_handle,
+            "family_id": family_id,
+            "tags": family.tags,
+            "ontology_refs": matching_refs,
+            "members": members,
+        }));
+    }
+
+    Ok(json!({
+        "runtime": "project_session",
+        "project_root": project_root.display().to_string(),
+        "sidecar": sidecar,
+        "families": matched,
+    }))
+}
+
+#[cfg(all(feature = "project-session", not(target_arch = "wasm32")))]
+fn project_session_member_matches(
+    member: &crate::project_session::ProjectFamilyMember,
+    convention: Option<&str>,
+    role: Option<&str>,
+    shape: Option<&str>,
+) -> bool {
+    if let Some(convention) = convention
+        && member.convention != convention
+    {
+        return false;
+    }
+    if role.is_none() && shape.is_none() {
+        return true;
+    }
+    let conv = member
+        .convention
+        .parse::<parser::Convention>()
+        .unwrap_or_else(|_| parser::detect_convention(&member.name));
+    let parsed = parser::parse(&member.name, conv);
+    if let Some(role) = role
+        && parsed.role.as_deref() != Some(role)
+    {
+        return false;
+    }
+    if let Some(shape) = shape
+        && parsed.shape.as_deref() != Some(shape)
+    {
+        return false;
+    }
+    true
+}
+
+#[cfg(all(feature = "project-session", not(target_arch = "wasm32")))]
+fn project_session_ontology_refs(
+    session: &crate::project_session::ProjectSession,
+    project_root: &Path,
+) -> Vec<index::OntologyRef> {
+    let ontology = session.ontology_state();
+    let Some(report) = ontology.report.as_ref() else {
+        return Vec::new();
+    };
+    let mut refs: Vec<index::OntologyRef> = report
+        .tags
+        .iter()
+        .map(|tag| index::OntologyRef {
+            tag: tag.tag.clone(),
+            path: project_relative_path(&tag.path, project_root),
+            hash: sha256_file(&tag.path).unwrap_or_default(),
+        })
+        .collect();
+    refs.sort_by(|a, b| a.tag.cmp(&b.tag));
+    refs
+}
+
+#[cfg(all(feature = "project-session", not(target_arch = "wasm32")))]
+fn project_session_sidecar_json(session: &crate::project_session::ProjectSession) -> Value {
+    let sidecar = session.sidecar_state();
+    json!({
+        "path": sidecar.path.display().to_string(),
+        "exists": sidecar.exists,
+        "len": sidecar.len,
+        "modified_secs": sidecar.modified_secs,
+    })
+}
+
+#[cfg(all(feature = "project-session", not(target_arch = "wasm32")))]
+fn canonical_project_root_for_handles(project_root: &Path) -> String {
+    project_root
+        .canonicalize()
+        .unwrap_or_else(|_| project_root.to_path_buf())
+        .to_string_lossy()
+        .replace('\\', "/")
+}
+
+#[cfg(all(feature = "project-session", not(target_arch = "wasm32")))]
+fn project_relative_path(path: &Path, project_root: &Path) -> String {
+    let absolute = if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        project_root.join(path)
+    };
+    let absolute = absolute.canonicalize().unwrap_or(absolute);
+    let root = project_root
+        .canonicalize()
+        .unwrap_or_else(|_| project_root.to_path_buf());
+    absolute
+        .strip_prefix(&root)
+        .unwrap_or(&absolute)
+        .to_string_lossy()
+        .replace('\\', "/")
+}
+
+#[cfg(all(feature = "project-session", not(target_arch = "wasm32")))]
+fn sha256_file(path: &Path) -> Option<String> {
+    use sha2::{Digest, Sha256};
+
+    let bytes = std::fs::read(path).ok()?;
+    let mut hasher = Sha256::new();
+    hasher.update(bytes);
+    let digest = hasher.finalize();
+    let mut hex = String::with_capacity(digest.len() * 2);
+    for byte in digest {
+        hex.push_str(&format!("{byte:02x}"));
+    }
+    Some(format!("sha256:{hex}"))
 }
 
 fn tool_lint_session_doc(args: &Value) -> Result<Value, String> {

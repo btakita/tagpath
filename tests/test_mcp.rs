@@ -7,10 +7,14 @@
 #![cfg(feature = "mcp")]
 
 use std::io::Write;
+#[cfg(feature = "project-session")]
+use std::io::{BufRead, BufReader, Read};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
 use serde_json::Value;
+#[cfg(feature = "project-session")]
+use tagpath::index::{self, BuildOptions};
 
 /// Build a uniquely-named temp project root, removing any leftover from a prior run.
 fn make_project(label: &str) -> PathBuf {
@@ -75,6 +79,71 @@ fn run_mcp(requests: &[&str]) -> Vec<Value> {
         .lines()
         .filter(|l| !l.trim().is_empty())
         .map(|l| serde_json::from_str::<Value>(l).expect("response is JSON"))
+        .collect()
+}
+
+#[cfg(feature = "project-session")]
+fn run_mcp_with_mid_request_edit(first: &str, edit: impl FnOnce(), second: &str) -> Vec<Value> {
+    let bin = env!("CARGO_BIN_EXE_tagpath");
+    let mut child = Command::new(bin)
+        .arg("mcp")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("spawn tagpath mcp");
+
+    let mut stdin = child.stdin.take().expect("stdin");
+    let stdout = child.stdout.take().expect("stdout");
+    let mut stderr = child.stderr.take().expect("stderr");
+    let mut reader = BufReader::new(stdout);
+
+    stdin.write_all(first.as_bytes()).unwrap();
+    stdin.write_all(b"\n").unwrap();
+    stdin.flush().unwrap();
+
+    let mut first_line = String::new();
+    reader.read_line(&mut first_line).expect("first response");
+    assert!(
+        !first_line.trim().is_empty(),
+        "expected response before edit"
+    );
+
+    edit();
+
+    stdin.write_all(second.as_bytes()).unwrap();
+    stdin.write_all(b"\n").unwrap();
+    stdin.flush().unwrap();
+    drop(stdin);
+
+    let mut remaining_stdout = String::new();
+    reader
+        .read_to_string(&mut remaining_stdout)
+        .expect("remaining stdout");
+
+    let status = child.wait().expect("wait");
+    let mut stderr_text = String::new();
+    stderr.read_to_string(&mut stderr_text).unwrap();
+    assert!(
+        status.success(),
+        "tagpath mcp exited non-zero: {status:?}\nstderr: {stderr_text}"
+    );
+
+    let mut lines = vec![first_line];
+    lines.extend(
+        remaining_stdout
+            .lines()
+            .filter(|line| !line.trim().is_empty())
+            .map(|line| {
+                let mut owned = line.to_string();
+                owned.push('\n');
+                owned
+            }),
+    );
+    lines
+        .into_iter()
+        .filter(|line| !line.trim().is_empty())
+        .map(|line| serde_json::from_str::<Value>(&line).expect("response is JSON"))
         .collect()
 }
 
@@ -285,6 +354,105 @@ fn family_by_path_returns_diagnostic_for_unknown_path() {
         serde_json::from_str(r["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
     assert_eq!(payload["diagnostic"], "path_not_in_index");
     assert!(payload["families"].as_array().unwrap().is_empty());
+
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[cfg(feature = "project-session")]
+#[test]
+fn family_by_path_project_session_runtime_refreshes_after_edit() {
+    let root = make_project("family_by_path_project_session_refresh");
+    write_naming_toml(&root);
+    write_source(&root, "src/foo.rs", "fn create_user() {}\n");
+
+    let abs_src = root.canonicalize().unwrap().join("src/foo.rs");
+    let first = format!(
+        r#"{{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{{"name":"family_by_path","arguments":{{"path":"{}","runtime":"project_session"}}}}}}"#,
+        abs_src.display()
+    );
+    let second = format!(
+        r#"{{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{{"name":"family_by_path","arguments":{{"path":"{}","runtime":"project_session"}}}}}}"#,
+        abs_src.display()
+    );
+
+    let responses = run_mcp_with_mid_request_edit(
+        &first,
+        || {
+            write_source(
+                &root,
+                "src/foo.rs",
+                "fn create_user() {}\nfn delete_user() {}\n",
+            )
+        },
+        &second,
+    );
+    assert_eq!(responses.len(), 2);
+    let first_payload: Value = serde_json::from_str(
+        responses[0]["result"]["content"][0]["text"]
+            .as_str()
+            .unwrap(),
+    )
+    .unwrap();
+    let second_payload: Value = serde_json::from_str(
+        responses[1]["result"]["content"][0]["text"]
+            .as_str()
+            .unwrap(),
+    )
+    .unwrap();
+
+    assert_eq!(first_payload["runtime"], "project_session");
+    assert_eq!(second_payload["runtime"], "project_session");
+    let first_text = first_payload.to_string();
+    let second_text = second_payload.to_string();
+    assert!(first_text.contains("create_user"));
+    assert!(
+        !first_text.contains("delete_user"),
+        "delete_user should not be visible before the edit: {first_text}"
+    );
+    assert!(
+        second_text.contains("delete_user"),
+        "project-session refresh should see same-process edits: {second_text}"
+    );
+    assert!(
+        second_text.contains("mem:"),
+        "project-session path should preserve member handles: {second_text}"
+    );
+
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[cfg(feature = "project-session")]
+#[test]
+fn indexed_project_query_project_session_reports_sidecar_state() {
+    let root = make_project("indexed_project_query_project_session_sidecar");
+    write_naming_toml(&root);
+    write_source(&root, "src/foo.rs", "fn create_user() {}\n");
+    let idx = index::build(&BuildOptions {
+        project_root: root.clone(),
+    })
+    .expect("build index");
+    index::write(&idx, &index::index_path(&root)).expect("write index");
+
+    let req = format!(
+        r#"{{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{{"name":"indexed_project_query","arguments":{{"path":"{}","tag":"user","runtime":"project_session"}}}}}}"#,
+        root.display()
+    );
+    let responses = run_mcp(&[req.as_str()]);
+    assert_eq!(responses[0]["result"]["isError"], false);
+    let payload: Value = serde_json::from_str(
+        responses[0]["result"]["content"][0]["text"]
+            .as_str()
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(payload["runtime"], "project_session");
+    assert_eq!(payload["sidecar"]["exists"], true);
+    assert!(payload["sidecar"]["len"].as_u64().unwrap_or(0) > 0);
+    assert!(
+        payload["families"].as_array().unwrap()[0]["handle"]
+            .as_str()
+            .is_some_and(|handle| handle.starts_with("fam:"))
+    );
 
     let _ = std::fs::remove_dir_all(&root);
 }

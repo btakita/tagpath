@@ -1099,7 +1099,9 @@ The script builds the current `target/debug/tagpath` binary unless
 1000-file Rust project, primes `.naming/index.json` and
 `.naming/index.bincache`, and prints CSV timing rows. `--plan` prints
 the command matrix without building or running the benchmark; tests use
-that mode to keep this section synchronized.
+that mode to keep this section synchronized. `--project-session` builds
+with the optional lazily-rs prototype and appends the opt-in MCP runtime
+rows from §17.8.
 
 Target budgets are intentionally conservative for the debug binary on a
 developer workstation. Lazier project/session work may change the
@@ -1114,6 +1116,9 @@ documented tradeoff:
 | `watch_save_burst` | <= 500 ms | Start `tagpath watch "$fixture" --no-lint --emit-shape compact`, write a five-save burst, and wait for the next `index_update`. |
 | `mcp_indexed_project_query` | <= 150 ms | Send a `tools/call` request for `indexed_project_query` through `tagpath mcp`. |
 | `mcp_family_by_path_read` | <= 150 ms | Send a `tools/call` request for `family_by_path` through `tagpath mcp`. |
+| `project_session_mcp_indexed_project_query` | <= 400 ms | With `--project-session`, send `indexed_project_query` with `runtime: "project_session"` through `tagpath mcp`. |
+| `project_session_mcp_family_by_path_read` | <= 350 ms | With `--project-session`, send `family_by_path` with `runtime: "project_session"` through `tagpath mcp`. |
+| `project_session_save_burst_mcp_read` | <= 500 ms | With `--project-session`, write a five-save burst, then read the edited file through `family_by_path` with `runtime: "project_session"`. |
 
 The watch budget measures wall time from the first write in the save
 burst until the next `index_update`, so it includes the configured
@@ -1144,10 +1149,45 @@ cargo test --features project-session --test test_project_session
 | Search hits | `Slot<Vec<ProjectSearchHit>>` | Depends on query cell + family map. |
 | Lint findings | `Slot<Result<Vec<LintViolation>, String>>` | Depends on project root + config + source list. |
 
-This feature is not enabled by default and is not yet wired into
-`tagpath watch`, MCP, or index update commands. The adoption bar remains
-the §17.7 benchmark matrix: no regression in no-op sidecar/index paths,
-clearer invalidation code, and bounded single-thread ownership.
+This feature is not enabled by default. The first runtime exercise is
+limited to request-scoped MCP reads: `indexed_project_query` and
+`family_by_path` accept `runtime: "project_session"` when the binary is
+built with `--features project-session`. The MCP server keeps
+ProjectSession instances in per-process state keyed by project root and
+calls `refresh()` at each opt-in request boundary, so repeated requests
+inside one MCP process reuse lazily slots when the source-list fingerprint
+is unchanged and invalidate derived family/search state after same-path
+file edits.
+
+The opt-in branch preserves normal MCP handles by deriving `fam:` and
+`mem:` values with the same public index handle helpers. `family_by_path`
+also returns ProjectSession sidecar metadata (`path`, `exists`, `len`,
+`modified_secs`) so the runtime path can be compared against the existing
+sidecar no-op baseline without making ProjectSession own index writes.
+
+On 2026-06-09, `scripts/benchmark-current-performance.sh
+--project-session` on the default 1000-file fixture produced these median
+timings with the debug binary:
+
+```csv
+case,budget_ms,runs,min_ms,median_ms,max_ms,status
+noop_sidecar_update,10,5,6,7,8,pass
+watch_save_burst,500,5,371,372,372,pass
+mcp_indexed_project_query,150,5,98,98,99,pass
+mcp_family_by_path_read,150,5,59,60,61,pass
+project_session_mcp_indexed_project_query,400,5,341,348,354,pass
+project_session_mcp_family_by_path_read,350,5,277,284,295,pass
+project_session_save_burst_mcp_read,500,5,383,389,398,pass
+```
+
+The sidecar no-op path remains under the <= 10 ms baseline because
+ProjectSession is still opt-in and does not participate in `index
+--update`. The opt-in MCP reads are 3.55x-4.73x slower than the
+index-backed MCP rows on this fixture, while the save-burst read remains
+under the watch budget because it avoids watcher debounce but pays for a
+fresh request-scoped project scan. The adoption bar remains the §17.7
+benchmark matrix: no regression in no-op sidecar/index paths, clearer
+invalidation code, and bounded single-thread ownership.
 
 ## 18. Workspace split
 

@@ -67,3 +67,66 @@ fn benchmark_plan_matches_spec_budget_table() {
         );
     }
 }
+
+#[test]
+fn project_session_benchmark_plan_matches_spec_budget_table() {
+    let output = Command::new("bash")
+        .arg("scripts/benchmark-current-performance.sh")
+        .arg("--plan")
+        .arg("--project-session")
+        .current_dir(manifest_dir())
+        .output()
+        .expect("run project-session benchmark plan");
+    assert!(
+        output.status.success(),
+        "benchmark --plan --project-session failed: status={:?}\nstderr={}",
+        output.status,
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let stdout = String::from_utf8(output.stdout).expect("plan utf8");
+    let mut plan = BTreeMap::new();
+    for line in stdout.lines().skip(1) {
+        let mut parts = line.splitn(3, ',');
+        let case = parts.next().expect("case").to_string();
+        let budget = parts
+            .next()
+            .expect("budget")
+            .parse::<u64>()
+            .expect("numeric budget");
+        let command = parts.next().expect("command").to_string();
+        plan.insert(case, (budget, command));
+    }
+
+    let expected_project_session: BTreeSet<&str> = [
+        "project_session_mcp_indexed_project_query",
+        "project_session_mcp_family_by_path_read",
+        "project_session_save_burst_mcp_read",
+    ]
+    .into_iter()
+    .collect();
+    for case in &expected_project_session {
+        assert!(
+            plan.contains_key(*case),
+            "missing project-session case {case}"
+        );
+    }
+
+    let spec = std::fs::read_to_string(format!("{}/SPEC.md", manifest_dir())).expect("SPEC.md");
+    for case in expected_project_session {
+        let (budget, command) = plan.get(case).expect("case present");
+        assert!(
+            spec.contains(&format!("`{case}`")),
+            "SPEC missing case {case}"
+        );
+        assert!(
+            spec.contains(&format!("<= {budget} ms")),
+            "SPEC missing budget for {case}"
+        );
+        let first_word = command.split_whitespace().next().expect("command word");
+        assert!(
+            spec.contains(first_word),
+            "SPEC missing command marker {first_word:?} for {case}"
+        );
+    }
+}

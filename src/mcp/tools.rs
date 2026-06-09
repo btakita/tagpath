@@ -98,13 +98,14 @@ fn ontology_lookup_tool() -> Value {
 fn family_by_path_tool() -> Value {
     json!({
         "name": "family_by_path",
-        "description": "Return every indexed family whose members include a record for the given source file. Opens .naming/index.json (auto-builds when missing/stale). Members are filtered to only those matching the input path. Returns `{ families: [...], diagnostic? }`; `diagnostic: \"path_not_in_index\"` when the file is unknown to the index and is not a tracked source.",
+        "description": "Return every indexed family whose members include a record for the given source file. Opens .naming/index.json (auto-builds when missing/stale). Members are filtered to only those matching the input path. Returns `{ families: [...], diagnostic? }`; `diagnostic: \"path_not_in_index\"` when the file is unknown to the index and is not a tracked source. With the optional project-session feature, `runtime: \"project_session\"` exercises the lazily-rs ProjectSession path.",
         "inputSchema": {
             "type": "object",
             "properties": {
                 "path": { "type": "string", "description": "absolute or project-relative source file path" },
                 "project_root": { "type": "string", "description": "optional project root; auto-detected via .naming.toml if omitted" },
                 "auto_build": { "type": "boolean", "default": true, "description": "rebuild index if missing or stale" },
+                "runtime": { "type": "string", "enum": ["index", "project_session"], "default": "index", "description": "Use the persistent index or the optional lazily-rs ProjectSession runtime" },
             },
             "required": ["path"],
         },
@@ -146,7 +147,7 @@ fn index_handle_tool() -> Value {
 fn indexed_project_query_tool() -> Value {
     json!({
         "name": "indexed_project_query",
-        "description": "Query the persistent project index (.naming/index.json), filtering families by tag and members by convention/role/shape. Auto-builds the index when missing and auto-rebuilds when stale (notice logged to stderr).",
+        "description": "Query the persistent project index (.naming/index.json), filtering families by tag and members by convention/role/shape. Auto-builds the index when missing and auto-rebuilds when stale (notice logged to stderr). With the optional project-session feature, `runtime: \"project_session\"` exercises the lazily-rs ProjectSession runtime instead of reading the index.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -155,6 +156,7 @@ fn indexed_project_query_tool() -> Value {
                 "convention": { "type": "string", "description": "Optional member convention filter (snake_case, camel_case, pascal_case, kebab_case, upper_snake_case, ada_case)" },
                 "role": { "type": "string", "description": "Optional role filter (e.g. create, update)" },
                 "shape": { "type": "string", "description": "Optional shape filter" },
+                "runtime": { "type": "string", "enum": ["index", "project_session"], "default": "index", "description": "Use the persistent index or the optional lazily-rs ProjectSession runtime" },
             },
             "required": ["path"],
         },
