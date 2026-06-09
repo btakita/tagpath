@@ -23,6 +23,7 @@ required-features = ["treesitter"]
 [features]
 default = ["lang-rust", "lang-python", "lang-javascript", "lang-typescript", "lang-go", "lang-c", "lang-cpp", "lang-java", "lang-ruby", "lang-php", "lang-csharp", "lang-swift", "lang-kotlin", "mcp", "watch"]
 mcp = []
+project-session = ["dep:lazily"]
 wasm = ["dep:wasm-bindgen", "dep:serde-wasm-bindgen", "dep:js-sys"]
 treesitter = ["dep:tree-sitter"]
 # Filesystem-watching NDJSON stream (`tagpath watch`). Native-only; not
@@ -78,3 +79,4 @@ tree-sitter-language = { version = "0.1", optional = true }
 dirs = "5"
 notify = { version = "6", optional = true }
 libc = { version = "0.2", optional = true }
+lazily = { version = "0.10.2", optional = true }

@@ -1120,6 +1120,35 @@ burst until the next `index_update`, so it includes the configured
 150 ms debounce window. The other rows measure process wall time for
 the stated command path, including CLI or MCP process startup.
 
+### 17.8 ProjectSession prototype
+
+The optional `project-session` feature enables a root-facade prototype
+for evaluating `lazily-rs` as the project invalidation layer:
+
+```bash
+cargo test --features project-session --test test_project_session
+```
+
+`tagpath-core` stays unchanged. The prototype lives in
+`tagpath::project_session` because it owns filesystem-backed state:
+
+| State | Lazily primitive | Notes |
+|---|---|---|
+| Project root | `Cell<PathBuf>` | Changing it invalidates every derived project view after `refresh()`. |
+| Resolved config | `Cell<ConfigState>` | Stores the resolved `.naming.toml`, config path, error, and equality fingerprint. |
+| Source list | `Cell<SourceListState>` | Stores the sorted source-file list from `extract::list_source_files` plus a path/mtime/size fingerprint. |
+| Ontology | `Cell<OntologyState>` | Stores `.naming/tags` report metadata and validation errors. |
+| Sidecar state | `Cell<SidecarState>` | Tracks `.naming/index.bincache` existence, length, and mtime. |
+| Extraction | `Slot<Vec<ExtractedIdentifier>>` | Depends on project root + source list. |
+| Family map | `Slot<ProjectFamilyMap>` | Depends on extraction + ontology. |
+| Search hits | `Slot<Vec<ProjectSearchHit>>` | Depends on query cell + family map. |
+| Lint findings | `Slot<Result<Vec<LintViolation>, String>>` | Depends on project root + config + source list. |
+
+This feature is not enabled by default and is not yet wired into
+`tagpath watch`, MCP, or index update commands. The adoption bar remains
+the §17.7 benchmark matrix: no regression in no-op sidecar/index paths,
+clearer invalidation code, and bounded single-thread ownership.
+
 ## 18. Workspace split
 
 The first crate split is a conservative `tagpath-core` extraction. The

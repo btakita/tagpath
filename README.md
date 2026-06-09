@@ -494,6 +494,15 @@ query/read calls. `scripts/benchmark-current-performance.sh --plan`
 prints the command matrix without running it. SPEC.md §17.7 records the
 target median budgets.
 
+The optional `project-session` feature contains the first lazily-rs
+prototype for that work. It keeps `tagpath-core` unchanged and models
+project config, source list, ontology, sidecar, extraction, family,
+search, and lint state in the root facade:
+
+```sh
+cargo test --features project-session --test test_project_session
+```
+
 ## Roadmap
 
 - **Phase 1** ✅ — Parse, detect conventions, semantic equivalence

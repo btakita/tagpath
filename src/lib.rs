@@ -15,6 +15,8 @@ pub mod mcp;
 pub mod meta_index;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod ontology;
+#[cfg(all(feature = "project-session", not(target_arch = "wasm32")))]
+pub mod project_session;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod rename;
 #[cfg(not(target_arch = "wasm32"))]
