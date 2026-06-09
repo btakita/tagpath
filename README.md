@@ -518,6 +518,11 @@ ProjectSession MCP reads at 348 ms for `indexed_project_query`, 284 ms
 for `family_by_path`, and 389 ms for a five-save burst followed by an MCP
 read.
 
+Decision: do not adopt lazily-rs into the default tagpath runtime yet.
+The prototype stays behind `project-session`; default index, watch, and
+MCP behavior remain index-backed until a future benchmark shows a clear
+latency or maintainability win.
+
 ## Roadmap
 
 - **Phase 1** ✅ — Parse, detect conventions, semantic equivalence

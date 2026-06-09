@@ -1189,6 +1189,15 @@ fresh request-scoped project scan. The adoption bar remains the §17.7
 benchmark matrix: no regression in no-op sidecar/index paths, clearer
 invalidation code, and bounded single-thread ownership.
 
+Decision on 2026-06-09: do not adopt lazily-rs into the default tagpath
+runtime. The prototype satisfies bounded single-thread ownership and
+shows explicit invalidation behavior in same-process MCP tests, but it
+does not beat the existing index-backed MCP reads and does not simplify
+the sidecar/index update path enough to justify moving default watch,
+index, or MCP behavior onto ProjectSession. Keep the `project-session`
+feature as an internal experiment and require a new benchmark cycle before
+any future adoption attempt.
+
 ## 18. Workspace split
 
 The first crate split is a conservative `tagpath-core` extraction. The

@@ -130,3 +130,33 @@ fn project_session_benchmark_plan_matches_spec_budget_table() {
         );
     }
 }
+
+#[test]
+fn project_session_adoption_decision_is_documented() {
+    let spec = std::fs::read_to_string(format!("{}/SPEC.md", manifest_dir())).expect("SPEC.md");
+    let readme =
+        std::fs::read_to_string(format!("{}/README.md", manifest_dir())).expect("README.md");
+
+    let decision = "do not adopt lazily-rs";
+    let default_runtime = "default tagpath runtime";
+    assert!(
+        spec.contains(decision),
+        "SPEC should record the measured project-session adoption decision"
+    );
+    assert!(
+        spec.contains("default tagpath") && spec.contains("runtime"),
+        "SPEC should say the decision applies to the default tagpath runtime"
+    );
+    assert!(
+        readme.contains(decision),
+        "README should summarize the project-session adoption decision"
+    );
+    assert!(
+        readme.contains(default_runtime),
+        "README should say the decision applies to the default tagpath runtime"
+    );
+    assert!(
+        spec.contains("project-session"),
+        "SPEC should name the retained feature-gated prototype"
+    );
+}
