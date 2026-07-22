@@ -79,4 +79,4 @@ tree-sitter-language = { version = "0.1", optional = true }
 dirs = "5"
 notify = { version = "6", optional = true }
 libc = { version = "0.2", optional = true }
-lazily = { version = "0.10.3", optional = true }
+lazily = { version = "0.48.1", optional = true }

@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::time::UNIX_EPOCH;
 
-use lazily::{CellHandle, Context, SlotHandle};
+use lazily::{Computed, Context, Source};
 use serde::Serialize;
 
 use crate::{config, extract, index, lint, ontology, parser};
@@ -95,67 +95,67 @@ pub struct ProjectSearchHit {
 
 pub struct ProjectSession {
     ctx: Context,
-    project_root: CellHandle<PathBuf>,
-    config: CellHandle<ConfigState>,
-    sources: CellHandle<SourceListState>,
-    ontology: CellHandle<OntologyState>,
-    sidecar: CellHandle<SidecarState>,
-    query: CellHandle<String>,
-    extraction: SlotHandle<Vec<extract::ExtractedIdentifier>>,
-    family_map: SlotHandle<ProjectFamilyMap>,
-    search: SlotHandle<Vec<ProjectSearchHit>>,
-    lint_findings: SlotHandle<Result<Vec<lint::LintViolation>, String>>,
+    project_root: Source<PathBuf>,
+    config: Source<ConfigState>,
+    sources: Source<SourceListState>,
+    ontology: Source<OntologyState>,
+    sidecar: Source<SidecarState>,
+    query: Source<String>,
+    extraction: Computed<Vec<extract::ExtractedIdentifier>>,
+    family_map: Computed<ProjectFamilyMap>,
+    search: Computed<Vec<ProjectSearchHit>>,
+    lint_findings: Computed<Result<Vec<lint::LintViolation>, String>>,
 }
 
 impl ProjectSession {
     pub fn new(project_root: impl Into<PathBuf>) -> Self {
         let ctx = Context::new();
         let root = project_root.into();
-        let config = ctx.cell(ConfigState::load(&root));
-        let sources = ctx.cell(SourceListState::load(&root));
-        let ontology = ctx.cell(OntologyState::load(&root));
-        let sidecar = ctx.cell(SidecarState::load(&root));
-        let query = ctx.cell(String::new());
-        let project_root = ctx.cell(root);
+        let config = ctx.source(ConfigState::load(&root));
+        let sources = ctx.source(SourceListState::load(&root));
+        let ontology = ctx.source(OntologyState::load(&root));
+        let sidecar = ctx.source(SidecarState::load(&root));
+        let query = ctx.source(String::new());
+        let project_root = ctx.source(root);
 
         let extraction = {
-            let project_root_cell = project_root;
-            let sources_cell = sources;
+            let project_root_source = project_root;
+            let sources_source = sources;
             ctx.slot(move |ctx| {
-                let root = ctx.get_cell(&project_root_cell);
-                let _source_dependency = ctx.get_cell_rc(&sources_cell);
+                let root = ctx.get(&project_root_source);
+                let _source_dependency = ctx.get_rc(&sources_source);
                 extract::extract_from_path(&root)
             })
         };
 
         let family_map = {
             let extraction_slot = extraction;
-            let ontology_cell = ontology;
+            let ontology_source = ontology;
             ctx.slot(move |ctx| {
                 let extracted = ctx.get_rc(&extraction_slot);
-                let ontology = ctx.get_cell_rc(&ontology_cell);
+                let ontology = ctx.get_rc(&ontology_source);
                 ProjectFamilyMap::from_extracted(&extracted, ontology.report.as_deref())
             })
         };
 
         let search = {
-            let query_cell = query;
+            let query_source = query;
             let family_map_slot = family_map;
             ctx.slot(move |ctx| {
-                let query = ctx.get_cell(&query_cell);
+                let query = ctx.get(&query_source);
                 let families = ctx.get_rc(&family_map_slot);
                 search_family_map(&query, &families)
             })
         };
 
         let lint_findings = {
-            let project_root_cell = project_root;
-            let config_cell = config;
-            let sources_cell = sources;
+            let project_root_source = project_root;
+            let config_source = config;
+            let sources_source = sources;
             ctx.slot(move |ctx| {
-                let root = ctx.get_cell(&project_root_cell);
-                let config = ctx.get_cell_rc(&config_cell);
-                let _source_dependency = ctx.get_cell_rc(&sources_cell);
+                let root = ctx.get(&project_root_source);
+                let config = ctx.get_rc(&config_source);
+                let _source_dependency = ctx.get_rc(&sources_source);
                 match (config.config.as_deref(), config.error.as_ref()) {
                     (Some(config), _) => Ok(lint::lint(&root, config)),
                     (None, Some(error)) => Err(error.clone()),
@@ -180,42 +180,42 @@ impl ProjectSession {
     }
 
     pub fn project_root(&self) -> PathBuf {
-        self.ctx.get_cell(&self.project_root)
+        self.ctx.get(&self.project_root)
     }
 
     pub fn set_project_root(&self, project_root: impl Into<PathBuf>) {
-        self.ctx.set_cell(&self.project_root, project_root.into());
+        self.ctx.set(&self.project_root, project_root.into());
         self.refresh();
     }
 
     pub fn refresh(&self) {
         let root = self.project_root();
         self.ctx.batch(|ctx| {
-            ctx.set_cell(&self.config, ConfigState::load(&root));
-            ctx.set_cell(&self.sources, SourceListState::load(&root));
-            ctx.set_cell(&self.ontology, OntologyState::load(&root));
-            ctx.set_cell(&self.sidecar, SidecarState::load(&root));
+            ctx.set(&self.config, ConfigState::load(&root));
+            ctx.set(&self.sources, SourceListState::load(&root));
+            ctx.set(&self.ontology, OntologyState::load(&root));
+            ctx.set(&self.sidecar, SidecarState::load(&root));
         });
     }
 
     pub fn set_query(&self, query: impl Into<String>) {
-        self.ctx.set_cell(&self.query, query.into());
+        self.ctx.set(&self.query, query.into());
     }
 
     pub fn config_state(&self) -> Rc<ConfigState> {
-        self.ctx.get_cell_rc(&self.config)
+        self.ctx.get_rc(&self.config)
     }
 
     pub fn source_files(&self) -> Rc<Vec<PathBuf>> {
-        self.ctx.get_cell_rc(&self.sources).files.clone()
+        self.ctx.get_rc(&self.sources).files.clone()
     }
 
     pub fn ontology_state(&self) -> Rc<OntologyState> {
-        self.ctx.get_cell_rc(&self.ontology)
+        self.ctx.get_rc(&self.ontology)
     }
 
     pub fn sidecar_state(&self) -> SidecarState {
-        self.ctx.get_cell(&self.sidecar)
+        self.ctx.get(&self.sidecar)
     }
 
     pub fn extracted_identifiers(&self) -> Rc<Vec<extract::ExtractedIdentifier>> {
